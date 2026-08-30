@@ -192,7 +192,7 @@ app.get('/api/stream/:identifier', async (req, res) => {
   } catch (error) {
     console.error(`Audio Stream Error for ${req.params.identifier}:`, error.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Stream failed' });
+      res.status(500).json({ error: 'Stream failed', message: error.message, stack: String(error.stack) });
     }
   }
 });
