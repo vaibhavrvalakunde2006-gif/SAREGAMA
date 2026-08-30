@@ -127,16 +127,19 @@ app.get('/api/stream/:identifier', async (req, res) => {
 
     if (!url) {
       // Use yt-dlp to get a working stream URL (bypasses 403 errors)
+      // Added timeout of 10s to prevent hanging, and force-ipv4
       const output = await youtubedl(`https://www.youtube.com/watch?v=${identifier}`, {
         dumpSingleJson: true,
         noCheckCertificates: true,
         noWarnings: true,
         preferFreeFormats: true,
+        forceIpv4: true,
+        geoBypass: true,
         addHeader: [
           'referer:youtube.com',
           'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         ]
-      });
+      }, { timeout: 10000 });
       
       const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
       audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
