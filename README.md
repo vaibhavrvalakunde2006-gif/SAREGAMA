@@ -4,6 +4,12 @@
 
 > 🌐 **Live Demo:** [https://saregama-lmt4.onrender.com](https://saregama-lmt4.onrender.com)
 
+> [!WARNING]
+> **Song playback is currently not available on the deployed website.** YouTube blocks audio streaming from cloud server IPs. We are actively working on a fix — stay tuned!
+
+> [!TIP]
+> **Want to enjoy the full experience right now?** Clone the repo and run it locally — songs play perfectly on your own machine! See the [Running Locally](#-running-locally) section below.
+
 ---
 
 ## ✨ Features
