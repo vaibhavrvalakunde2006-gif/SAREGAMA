@@ -364,13 +364,13 @@ function OnboardingScreen({ onDone }) {
 function SongRow({ song, index, isActive, isPlaying, liked, onPlay, onLike, onQueue, onAddToPlaylist, showIndex = true }) {
   return (
     <div
-      className={`group grid grid-cols-[24px_1fr_auto_auto_auto_auto] items-center gap-3 px-3 py-2 rounded-xl transition-colors cursor-pointer ${
+      className={`group flex items-center gap-2 md:gap-3 px-3 py-2 rounded-xl transition-colors cursor-pointer ${
         isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
       }`}
       onClick={() => onPlay(song)}
     >
       {showIndex ? (
-        <div className="text-xs text-[#7d7891] w-6 text-center">
+        <div className="text-xs text-[#7d7891] w-6 text-center shrink-0">
           {isActive && isPlaying ? (
             <div className="flex items-end gap-[2px] justify-center h-3">
               <span className="w-[2px] bg-[#2DD9C8] animate-[pulse_0.8s_ease-in-out_infinite] h-2" />
@@ -382,37 +382,40 @@ function SongRow({ song, index, isActive, isPlaying, liked, onPlay, onLike, onQu
           )}
         </div>
       ) : song.coverArt ? (
-        <img src={song.coverArt} alt={song.title} className="w-9 h-9 rounded-lg object-cover bg-white/5" onError={(e) => { e.target.style.display = 'none'; }} />
+        <img src={song.coverArt} alt={song.title} className="w-9 h-9 rounded-lg object-cover bg-white/5 shrink-0" onError={(e) => { e.target.style.display = 'none'; }} />
       ) : (
-        <CoverArt colors={song.colors} size="w-9 h-9" rounded="rounded-lg" />
+        <CoverArt colors={song.colors} size="w-9 h-9" rounded="rounded-lg shrink-0" />
       )}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className={`text-sm font-medium truncate ${isActive ? "text-[#2DD9C8]" : "text-[#EDEBF7]"}`}>{song.title}</div>
         <div className="text-xs text-[#9490A8] truncate">{song.artist}</div>
       </div>
-      <button
-        onClick={(e) => { e.stopPropagation(); onLike(song); }}
-        className="opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <Heart className={`w-4 h-4 ${liked ? "fill-[#FF6B81] text-[#FF6B81] opacity-100" : "text-[#9490A8]"}`} />
-      </button>
-      {onAddToPlaylist && (
+      
+      <div className="flex items-center gap-2 md:gap-3 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-[#9490A8] hover:text-[#EDEBF7]"
-          title="Add to playlist"
+          onClick={(e) => { e.stopPropagation(); onLike(song); }}
+          className="p-1"
         >
-          <Plus className="w-4 h-4" />
+          <Heart className={`w-4 h-4 ${liked ? "fill-[#FF6B81] text-[#FF6B81]" : "text-[#9490A8]"}`} />
         </button>
-      )}
-      <button
-        onClick={(e) => { e.stopPropagation(); onQueue(song); }}
-        className="opacity-0 group-hover:opacity-100 transition-opacity text-[#9490A8] hover:text-[#EDEBF7]"
-        title="Add to queue"
-      >
-        <ListPlus className="w-4 h-4" />
-      </button>
-      <div className="text-xs text-[#7d7891] w-10 text-right">{fmtTime(song.duration)}</div>
+        {onAddToPlaylist && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
+            className="p-1 hidden md:block text-[#9490A8] hover:text-[#EDEBF7]"
+            title="Add to playlist"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onQueue(song); }}
+          className="p-1 hidden sm:block text-[#9490A8] hover:text-[#EDEBF7]"
+          title="Add to queue"
+        >
+          <ListPlus className="w-4 h-4" />
+        </button>
+      </div>
+      <div className="text-xs text-[#7d7891] w-10 text-right shrink-0">{fmtTime(song.duration)}</div>
     </div>
   );
 }
@@ -1655,21 +1658,28 @@ function PlayerBar({ song, isPlaying, progress, onToggle, onNext, onPrev, liked,
   const pct = (progress / song.duration) * 100;
 
   return (
-    <Glass className="rounded-2xl mx-3 mb-3 px-4 py-3 flex items-center gap-4">
-      <div className="flex items-center gap-3 w-1/4 min-w-[180px]">
-        <button onClick={onExpand} className="shrink-0">
-          <CoverArt colors={song.colors} size="w-12 h-12" rounded="rounded-lg" />
+    <Glass className="rounded-2xl mx-2 md:mx-3 mb-2 md:mb-3 px-3 md:px-4 py-2 md:py-3 flex items-center justify-between md:justify-start gap-2 md:gap-4 cursor-pointer md:cursor-auto" onClick={(e) => {
+      // Expand player on mobile when clicking the bar
+      if (window.innerWidth < 768) {
+        onExpand();
+      }
+    }}>
+      {/* Left side (Song Info) */}
+      <div className="flex items-center gap-3 w-auto md:w-1/4 md:min-w-[180px] flex-1 min-w-0">
+        <button onClick={(e) => { e.stopPropagation(); onExpand(); }} className="shrink-0">
+          <CoverArt colors={song.colors} size="w-10 h-10 md:w-12 md:h-12" rounded="rounded-lg md:rounded-lg" />
         </button>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 flex flex-col justify-center">
           <div className="text-sm font-semibold text-[#EDEBF7] truncate">{song.title}</div>
           <div className="text-xs text-[#9490A8] truncate">{song.artist}</div>
         </div>
-        <button onClick={() => onLike(song)}>
+        <button onClick={(e) => { e.stopPropagation(); onLike(song); }} className="hidden md:block">
           <Heart className={`w-4 h-4 shrink-0 ${liked ? "fill-[#FF6B81] text-[#FF6B81]" : "text-[#9490A8]"}`} />
         </button>
       </div>
 
-      <div className="flex-1 flex flex-col items-center gap-1.5 max-w-xl mx-auto">
+      {/* Center (Controls) - Hidden on Mobile */}
+      <div className="hidden md:flex flex-1 flex-col items-center gap-1.5 max-w-xl mx-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-5">
           <button onClick={() => setShuffle(!shuffle)} className={shuffle ? "text-[#2DD9C8]" : "text-[#9490A8] hover:text-[#EDEBF7]"}>
             <Shuffle className="w-4 h-4" />
@@ -1705,17 +1715,38 @@ function PlayerBar({ song, isPlaying, progress, onToggle, onNext, onPrev, liked,
         </div>
       </div>
 
-      <div className="flex items-center gap-3 w-1/4 min-w-[160px] justify-end">
+      {/* Right (Extra Tools) - Hidden on Mobile */}
+      <div className="hidden md:flex items-center gap-3 w-1/4 min-w-[160px] justify-end" onClick={(e) => e.stopPropagation()}>
         <button onClick={() => setPanel(panel === "lyrics" ? null : "lyrics")} className={panel === "lyrics" ? "text-[#2DD9C8]" : "text-[#9490A8] hover:text-[#EDEBF7]"}>
           <Mic2 className="w-4 h-4" />
         </button>
         <button onClick={() => setPanel(panel === "queue" ? null : "queue")} className={panel === "queue" ? "text-[#2DD9C8]" : "text-[#9490A8] hover:text-[#EDEBF7]"}>
           <ListMusic className="w-4 h-4" />
         </button>
-        <div className="hidden lg:flex items-center gap-1.5 text-[#9490A8]">
+        <button onClick={() => setPanel(panel === "devices" ? null : "devices")} className={panel === "devices" ? "text-[#2DD9C8]" : "text-[#9490A8] hover:text-[#EDEBF7]"}>
+          <Speaker className="w-4 h-4" />
+        </button>
+        <div className="flex items-center gap-1.5 w-24 group relative">
           <VolumeIcon vol={vol} />
-          <input type="range" min="0" max="100" value={vol} onChange={(e) => setVol(+e.target.value)} className="w-20 accent-[#EDEBF7]" />
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={vol}
+            onChange={(e) => setVol(+e.target.value)}
+            className="flex-1 h-1 accent-[#EDEBF7] cursor-pointer opacity-80 group-hover:opacity-100"
+          />
         </div>
+      </div>
+
+      {/* Mobile Right Controls (Play/Pause/Like) */}
+      <div className="flex md:hidden items-center gap-3 shrink-0 pr-1">
+        <button onClick={(e) => { e.stopPropagation(); onLike(song); }} className="p-1">
+          <Heart className={`w-5 h-5 ${liked ? "fill-[#FF6B81] text-[#FF6B81]" : "text-[#9490A8]"}`} />
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="p-1 text-white">
+          {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white ml-0.5" />}
+        </button>
       </div>
     </Glass>
   );
@@ -1890,8 +1921,21 @@ function AddToPlaylistModal({ song, playlists, onAdd, onClose }) {
 /* ---------------------------------------------------------------------- */
 
 export default function BablooApp() {
+  const [stage, setStage] = useState("welcome");
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // Layout states
+  const [view, setView] = useState("home"); // home, search, library, profile, etc.
+  const [panel, setPanel] = useState(null); // lyrics, queue, activity, devices
+  const [collapsed, setCollapsed] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  
+  // Navigation details
+  const [openPlaylistId, setOpenPlaylistId] = useState(null);
+  const [openArtistName, setOpenArtistName] = useState(null);
+  const [openPodcastId, setOpenPodcastId] = useState(null);
+  const [openAudiobookId, setOpenAudiobookId] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
@@ -2398,20 +2442,28 @@ export default function BablooApp() {
 
         <main className="flex-1 min-w-0 flex flex-col">
           {/* mobile top bar */}
-          <div className="md:hidden flex items-center gap-3 px-4 pt-4">
-            <div className="h-10 flex items-center -ml-2">
+          <div className="md:hidden flex items-center justify-between px-4 pt-4 pb-1">
+            <div className="h-8 flex items-center -ml-2">
               <img src="/logo.png" alt="SAREGAMA" className="h-full object-contain scale-110 origin-left" />
             </div>
-            <div className="ml-auto flex gap-4">
-              {[["home", Home], ["search", Search], ["library", Library]].map(([id, Icon]) => (
-                <button key={id} onClick={() => { clearDetails(); setView(id); }} className={view === id && !openPlaylistId ? "text-[#2DD9C8]" : "text-[#9490A8]"}>
-                  <Icon className="w-5 h-5" />
-                </button>
-              ))}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowNotifications((v) => !v)}
+                className="relative w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-[#9490A8] hover:text-[#EDEBF7] hover:bg-white/5"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[#FF6B81]" />
+              </button>
+              <button
+                onClick={() => { clearDetails(); setView("profile"); }}
+                className="w-8 h-8 rounded-full bg-gradient-to-br from-[#FF9F45] to-[#B45309] flex items-center justify-center cursor-pointer"
+              >
+                <User className="w-4 h-4 text-white" />
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 px-6 pt-5 pb-2">
+          <div className="hidden md:flex items-center justify-end gap-3 px-6 pt-5 pb-2">
             <button
               onClick={() => setPanel(panel === "activity" ? null : "activity")}
               className={`hidden sm:flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${panel === "activity" ? "border-[#2DD9C8]/60 text-[#2DD9C8]" : "border-white/10 text-[#9490A8] hover:text-[#EDEBF7] hover:bg-white/5"}`}
@@ -2469,8 +2521,55 @@ export default function BablooApp() {
         setVol={setVol}
       />
 
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden flex items-center justify-around px-2 py-3 bg-[#08070C]/90 backdrop-blur-md border-t border-white/5 pb-safe z-40">
+         {[
+           ["home", "Home", Home], 
+           ["search", "Search", Search], 
+           ["library", "Library", Library], 
+           ["menu", "Menu", Menu]
+         ].map(([id, label, Icon]) => (
+            <button key={id} onClick={() => { 
+                if (id === 'menu') setShowMobileMenu(true);
+                else { clearDetails(); setView(id); }
+            }} className={`flex flex-col items-center gap-1 ${view === id && !openPlaylistId && id !== 'menu' ? "text-[#2DD9C8]" : "text-[#9490A8] hover:text-[#EDEBF7]"}`}>
+               <Icon className="w-6 h-6" />
+               <span className="text-[10px] font-medium">{label}</span>
+            </button>
+         ))}
+      </div>
+
       {!song && (
-        <div className="text-center text-[10px] text-[#5f5b70] pb-2">Pick any track to start listening</div>
+        <div className="text-center text-[10px] text-[#5f5b70] pb-2 hidden md:block">Pick any track to start listening</div>
+      )}
+
+      {showMobileMenu && (
+        <div className="md:hidden fixed inset-0 z-50 bg-[#08070C]/95 backdrop-blur-xl flex flex-col p-6 overflow-y-auto">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-2xl font-black text-[#EDEBF7]">Menu</h2>
+            <button onClick={() => setShowMobileMenu(false)} className="text-[#9490A8] hover:text-[#EDEBF7]"><X className="w-7 h-7" /></button>
+          </div>
+          <div className="flex flex-col gap-2">
+             {[
+               { id: "liked", label: "Liked Songs", icon: Heart },
+               { id: "history", label: "History", icon: HistoryIcon },
+               { id: "podcasts", label: "Podcasts", icon: Radio },
+               { id: "audiobooks", label: "Audiobooks", icon: BookOpen },
+               { id: "downloads", label: "Downloads", icon: Clock },
+               { id: "wrapped", label: "Wrapped", icon: Sparkles },
+               { id: "premium", label: "Premium", icon: Crown },
+               { id: "settings", label: "Settings", icon: SettingsIcon },
+             ].map(item => (
+                <button 
+                  key={item.id} 
+                  onClick={() => { clearDetails(); setView(item.id); setShowMobileMenu(false); }} 
+                  className={`flex items-center gap-4 px-4 py-4 rounded-xl text-lg font-medium transition-colors ${view === item.id ? 'bg-white/10 text-[#EDEBF7]' : 'text-[#9490A8] hover:text-[#EDEBF7] hover:bg-white/[0.04]'}`}
+                >
+                   <item.icon className="w-6 h-6 text-[#2DD9C8]" /> {item.label}
+                </button>
+             ))}
+          </div>
+        </div>
       )}
 
       {showCreate && <CreatePlaylistModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
@@ -2524,6 +2623,7 @@ export default function BablooApp() {
       {/* Hidden Real Audio Engine — always mounted so audioRef is stable */}
       <audio 
         ref={audioRef}
+        crossOrigin="anonymous"
         onTimeUpdate={(e) => setProgress(e.target.currentTime)}
         onLoadedMetadata={(e) => {
           const realDuration = e.target.duration;
