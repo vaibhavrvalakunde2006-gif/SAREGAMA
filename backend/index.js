@@ -13,7 +13,12 @@ const { Readable } = require('stream');
 const app = express();
 app.use(cors());
 app.use(express.json());
-
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).send({ error: 'Invalid JSON payload' });
+  }
+  next();
+});
 const cache = new NodeCache({ stdTTL: 600 });
 let ytClient = null;
 
@@ -112,8 +117,13 @@ app.get('/api/stream/:identifier', async (req, res) => {
     
     // Check cache for a working URL (to make seeking and re-fetching instant)
     const cacheKey = `stream-url:${identifier}`;
-    let url = cache.get(cacheKey);
-    let bestAudio = cache.get(`${cacheKey}-meta`);
+    let cached = cache.get(cacheKey);
+    let url, contentType;
+
+    if (cached) {
+      url = cached.url;
+      contentType = cached.contentType;
+    }
 
     if (!url) {
       // Use yt-dlp to get a working stream URL (bypasses 403 errors)
@@ -130,21 +140,21 @@ app.get('/api/stream/:identifier', async (req, res) => {
       
       const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
       audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
-      bestAudio = audioFormats[0];
+      const bestAudio = audioFormats[0];
       
       if (!bestAudio) {
         return res.status(404).json({ error: 'No stream available' });
       }
 
       url = bestAudio.url;
+      contentType = bestAudio.ext === 'webm' ? 'audio/webm' : 'audio/mp4';
       
-      // Cache URL for 4 hours (YouTube URLs usually expire after 6 hours)
-      cache.set(cacheKey, url, 14400);
-      cache.set(`${cacheKey}-meta`, bestAudio, 14400);
+      // Cache URL and content type together for 4 hours (YouTube URLs usually expire after 6 hours)
+      cache.set(cacheKey, { url, contentType }, 14400);
     }
     
     // Set proper headers for audio streaming
-    res.setHeader('Content-Type', bestAudio.ext === 'webm' ? 'audio/webm' : 'audio/mp4');
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'no-cache');
 
@@ -187,7 +197,40 @@ app.get('/api/stream/:identifier', async (req, res) => {
   }
 });
 
+// 4. Lyrics Endpoint
+app.get('/api/lyrics/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cacheKey = `lyrics:${id}`;
+    if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
+
+    const yt = await initYT();
+    const lyrics = await yt.music.getLyrics(id);
+    const lyricsText = lyrics?.description?.text || null;
+    
+    cache.set(cacheKey, { text: lyricsText }, 86400); // cache for a day
+    res.json({ text: lyricsText });
+  } catch (error) {
+    console.error(`Lyrics Error for ${req.params.id}:`, error.message);
+    res.json({ text: null }); // Don't crash, just say no lyrics
+  }
+});
+
+// Import and mount routers
+const authRouter = require('./routes/auth').router;
+const userRouter = require('./routes/user');
+
+app.use('/api/auth', authRouter);
+app.use('/api/me', userRouter);
+
+// Serve frontend statically in production
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Babloo YouTube Engine running on http://localhost:${PORT}`);
+  console.log(`SAREGAMA YouTube Engine running on http://localhost:${PORT}`);
 });

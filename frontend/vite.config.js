@@ -9,14 +9,18 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['logo.png'],
       manifest: {
-        name: 'babloo',
-        short_name: 'babloo',
+        name: 'SAREGAMA Music',
+        short_name: 'SAREGAMA',
         description: 'Free ad-free music player',
-        theme_color: '#000000',
+        theme_color: '#08070C',
+        background_color: '#08070C',
+        display: 'standalone',
+        start_url: '/',
         icons: [
-          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }
+          { src: '/favicon.svg', sizes: '192x192 512x512', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/icon-maskable.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' }
         ]
       }
     })

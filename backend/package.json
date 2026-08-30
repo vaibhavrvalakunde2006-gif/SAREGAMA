@@ -13,10 +13,12 @@
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
     "axios": "^1.19.0",
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "jintr": "^3.3.1",
+    "jsonwebtoken": "^9.0.3",
     "node-cache": "^5.1.2",
     "youtube-dl-exec": "^3.1.13",
     "youtube-po-token-generator": "^0.6.0",

@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import LandingPage from "./LandingPage";
+import ExpandedPlayer from "./ExpandedPlayer";
+import { apiFetch, getToken, setToken, removeToken } from "./lib/api";
 import {
   Play, Pause, SkipBack, SkipForward, Heart, Search, Home, Library,
   ListMusic, Plus, Shuffle, Repeat, Volume2, Volume1, VolumeX, ChevronDown,
@@ -9,7 +12,7 @@ import {
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
-/*  Babloo — mock catalog                                                  */
+/*  SAREGAMA — mock catalog                                                  */
 /* ---------------------------------------------------------------------- */
 
 const ARTISTS = [
@@ -184,8 +187,13 @@ function Eyebrow({ children }) {
   );
 }
 
-function CoverArt({ colors, size = "w-full aspect-square", rounded = "rounded-xl", icon = true }) {
-  const [c1, c2] = colors;
+function CoverArt({ colors, coverArt, alt, size = "w-full aspect-square", rounded = "rounded-xl", icon = true }) {
+  if (coverArt) {
+    return (
+      <img src={coverArt} alt={alt || "Cover"} className={`${size} ${rounded} object-cover bg-white/5`} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling && (e.target.nextSibling.style.display = 'flex'); }} />
+    );
+  }
+  const [c1, c2] = colors || ["#8B5CF6", "#2DD9C8"];
   return (
     <div
       className={`${size} ${rounded} flex items-center justify-center shrink-0 relative overflow-hidden`}
@@ -216,11 +224,8 @@ function WelcomeScreen({ onEnter }) {
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center relative px-6">
       <Aura colors={["#8B5CF6", "#2DD9C8"]} />
-      <div className="flex items-center gap-2 mb-10">
-        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#2DD9C8] flex items-center justify-center">
-          <Sparkles className="w-4 h-4 text-white" />
-        </div>
-        <span className="text-xl font-black tracking-tight text-[#EDEBF7]">babloo</span>
+      <div className="flex items-center justify-center mb-10 h-24">
+        <img src="/logo.png" alt="SAREGAMA" className="h-full object-contain scale-[1.3]" />
       </div>
 
       <Glass className="w-full max-w-sm rounded-3xl p-8 text-center">
@@ -228,7 +233,7 @@ function WelcomeScreen({ onEnter }) {
           Music that reads the room.
         </h1>
         <p className="text-sm text-[#9490A8] mb-8">
-          Stream, discover, and drift — Babloo adapts to whatever you're into tonight.
+          Stream, discover, and drift — SAREGAMA adapts to whatever you're into tonight.
         </p>
 
         <button
@@ -359,7 +364,7 @@ function OnboardingScreen({ onDone }) {
 function SongRow({ song, index, isActive, isPlaying, liked, onPlay, onLike, onQueue, onAddToPlaylist, showIndex = true }) {
   return (
     <div
-      className={`group grid grid-cols-[24px_1fr_auto_auto_auto] items-center gap-3 px-3 py-2 rounded-xl transition-colors cursor-pointer ${
+      className={`group grid grid-cols-[24px_1fr_auto_auto_auto_auto] items-center gap-3 px-3 py-2 rounded-xl transition-colors cursor-pointer ${
         isActive ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"
       }`}
       onClick={() => onPlay(song)}
@@ -391,6 +396,15 @@ function SongRow({ song, index, isActive, isPlaying, liked, onPlay, onLike, onQu
       >
         <Heart className={`w-4 h-4 ${liked ? "fill-[#FF6B81] text-[#FF6B81] opacity-100" : "text-[#9490A8]"}`} />
       </button>
+      {onAddToPlaylist && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onAddToPlaylist(song); }}
+          className="opacity-0 group-hover:opacity-100 transition-opacity text-[#9490A8] hover:text-[#EDEBF7]"
+          title="Add to playlist"
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      )}
       <button
         onClick={(e) => { e.stopPropagation(); onQueue(song); }}
         className="opacity-0 group-hover:opacity-100 transition-opacity text-[#9490A8] hover:text-[#EDEBF7]"
@@ -427,10 +441,9 @@ function Sidebar({ view, setView, playlists, collapsed, setCollapsed, onCreatePl
   return (
     <Glass className={`hidden md:flex flex-col h-full rounded-3xl m-3 mr-0 transition-all duration-300 ${collapsed ? "w-[76px]" : "w-64"}`}>
       <div className="flex items-center gap-2 px-5 pt-5 pb-6">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#2DD9C8] flex items-center justify-center shrink-0">
-          <Sparkles className="w-4 h-4 text-white" />
+        <div className="flex-1 flex items-center h-12">
+          {!collapsed && <img src="/logo.png" alt="SAREGAMA" className="h-full object-contain scale-125 origin-left" />}
         </div>
-        {!collapsed && <span className="text-lg font-black tracking-tight text-[#EDEBF7]">babloo</span>}
         <button onClick={() => setCollapsed(!collapsed)} className="ml-auto text-[#7d7891] hover:text-white">
           <Menu className="w-4 h-4" />
         </button>
@@ -607,7 +620,7 @@ function HomeView({ playlists, greeting, onPlaySong, onOpenPlaylist }) {
   );
 }
 
-function SearchView({ query, setQuery, onPlaySong, liked, onLike, onQueue }) {
+function SearchView({ query, setQuery, onPlaySong, liked, onLike, onQueue, onAddToPlaylist }) {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -704,6 +717,7 @@ function SearchView({ query, setQuery, onPlaySong, liked, onLike, onQueue }) {
                 onPlay={() => onPlaySong(s, results)}
                 onLike={onLike}
                 onQueue={onQueue}
+                onAddToPlaylist={onAddToPlaylist}
               />
             ))}
             {!loading && results.length === 0 && <div className="text-sm text-[#7d7891]">No matches. Try a different search.</div>}
@@ -734,15 +748,25 @@ function LibraryView({ playlists, onOpenPlaylist, onOpenArtist }) {
       </div>
 
       {tab === "playlists" && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
-          {playlists.map((p) => (
-            <button key={p.id} onClick={() => onOpenPlaylist(p.id)} className="text-left group">
-              <div className="rounded-xl overflow-hidden mb-2"><CoverArt colors={p.cover} /></div>
-              <div className="text-sm font-semibold text-[#EDEBF7] truncate">{p.name}</div>
-              <div className="text-xs text-[#9490A8]">{p.songIds.length} songs</div>
-            </button>
-          ))}
-        </div>
+        playlists.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
+            {playlists.map((p) => (
+              <button key={p.id} onClick={() => onOpenPlaylist(p.id)} className="text-left group">
+                <div className="rounded-xl overflow-hidden mb-2"><CoverArt colors={p.cover} /></div>
+                <div className="text-sm font-semibold text-[#EDEBF7] truncate">{p.name}</div>
+                <div className="text-xs text-[#9490A8]">{p.songs?.length || 0} songs</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <ListPlus className="w-16 h-16 text-[#9490A8] mb-4" />
+            <h2 className="text-xl font-bold text-[#EDEBF7] mb-2">No playlists yet</h2>
+            <p className="text-sm text-[#7d7891] max-w-sm">
+              Create your first playlist and start building your collection.
+            </p>
+          </div>
+        )
       )}
       {tab === "artists" && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
@@ -868,7 +892,7 @@ function PlaylistView({ playlist, songs, onBack, onPlaySong, activeSong, isPlayi
   );
 }
 
-function LikedView({ likedSongs, activeSong, isPlaying, liked, onPlaySong, onLike, onQueue }) {
+function LikedView({ likedSongs, activeSong, isPlaying, liked, onPlaySong, onLike, onQueue, onAddToPlaylist }) {
   return (
     <div>
       <div className="flex items-end gap-6 mb-8">
@@ -893,10 +917,17 @@ function LikedView({ likedSongs, activeSong, isPlaying, liked, onPlaySong, onLik
             onPlay={() => onPlaySong(s, likedSongs)}
             onLike={onLike}
             onQueue={onQueue}
+            onAddToPlaylist={onAddToPlaylist}
           />
         ))}
         {likedSongs.length === 0 && (
-          <div className="text-sm text-[#7d7891] mt-4">Songs you like will show up here. Tap the heart on any track.</div>
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Heart className="w-16 h-16 text-[#9490A8] mb-4" />
+            <h2 className="text-xl font-bold text-[#EDEBF7] mb-2">No liked songs yet</h2>
+            <p className="text-sm text-[#7d7891] max-w-sm">
+              Songs you like will show up here. Tap the heart on any track to add it to your Liked Songs.
+            </p>
+          </div>
         )}
       </div>
     </div>
@@ -983,26 +1014,17 @@ function SettingsView() {
   );
 }
 
-function DownloadsView({ likedSongs }) {
+function DownloadsView() {
   return (
     <div>
       <h1 className="text-2xl font-black text-[#EDEBF7] tracking-tight mb-6">Downloads</h1>
-      {likedSongs.length === 0 ? (
-        <p className="text-sm text-[#7d7891]">Nothing downloaded yet. Like a few songs to see them here.</p>
-      ) : (
-        <div className="flex flex-col gap-0.5">
-          {likedSongs.map((s, i) => (
-            <div key={s.id} className="grid grid-cols-[24px_1fr_auto] items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/[0.04]">
-              <CoverArt colors={s.colors} size="w-9 h-9" rounded="rounded-lg" />
-              <div className="min-w-0">
-                <div className="text-sm font-medium text-[#EDEBF7] truncate">{s.title}</div>
-                <div className="text-xs text-[#9490A8] truncate">{s.artist}</div>
-              </div>
-              <span className="text-[10px] uppercase tracking-wide text-[#2DD9C8] font-semibold">Downloaded</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <Clock className="w-16 h-16 text-[#9490A8] mb-4" />
+        <h2 className="text-xl font-bold text-[#EDEBF7] mb-2">Coming Soon</h2>
+        <p className="text-sm text-[#7d7891] max-w-sm">
+          Actual downloading is not currently supported for YouTube streams. Downloads will be available soon!
+        </p>
+      </div>
     </div>
   );
 }
@@ -1011,7 +1033,7 @@ function DownloadsView({ likedSongs }) {
 /*  Player bar + Queue/Lyrics panel                                        */
 /* ---------------------------------------------------------------------- */
 
-function HistoryView({ history, activeSong, isPlaying, liked, onPlaySong, onLike, onQueue }) {
+function HistoryView({ history, activeSong, isPlaying, liked, onPlaySong, onLike, onQueue, onAddToPlaylist }) {
   return (
     <div>
       <h1 className="text-2xl font-black text-[#EDEBF7] tracking-tight mb-1">Listening History</h1>
@@ -1029,9 +1051,18 @@ function HistoryView({ history, activeSong, isPlaying, liked, onPlaySong, onLike
             onPlay={() => onPlaySong(s, history)}
             onLike={onLike}
             onQueue={onQueue}
+            onAddToPlaylist={onAddToPlaylist}
           />
         ))}
-        {history.length === 0 && <div className="text-sm text-[#7d7891]">Nothing played yet — start a song and it'll show up here.</div>}
+        {history.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <HistoryIcon className="w-16 h-16 text-[#9490A8] mb-4" />
+            <h2 className="text-xl font-bold text-[#EDEBF7] mb-2">No history yet</h2>
+            <p className="text-sm text-[#7d7891] max-w-sm">
+              Nothing played yet — start listening to some songs and they'll show up here.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1122,7 +1153,7 @@ function AudiobooksView({ onOpenBook }) {
   );
 }
 
-function AudiobookDetailView({ book, onBack }) {
+function AudiobookDetailView({ book, onBack, onPlayChapter, activeChapterId, isPlaying }) {
   const pct = Math.round((book.progressMinutes / book.totalMinutes) * 100);
   return (
     <div>
@@ -1149,17 +1180,32 @@ function AudiobookDetailView({ book, onBack }) {
           </div>
         </div>
       )}
-      <button className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#2DD9C8] text-black text-sm font-semibold mb-6 w-fit hover:opacity-90">
+      <button 
+        onClick={() => onPlayChapter(book.chapters[0], book)}
+        className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#2DD9C8] text-black text-sm font-semibold mb-6 w-fit hover:opacity-90"
+      >
         <Play className="w-4 h-4 fill-black" /> {pct > 0 ? "Resume" : "Start listening"}
       </button>
       <Eyebrow>Chapters</Eyebrow>
       <div className="flex flex-col gap-0.5 mt-2">
         {book.chapters.map((c, i) => (
-          <div key={c.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/[0.04]">
-            <span className="text-xs text-[#7d7891] w-5">{i + 1}</span>
-            <span className="text-sm text-[#EDEBF7] flex-1">{c.title}</span>
+          <button
+            key={c.id}
+            onClick={() => onPlayChapter(c, book)}
+            className={`text-left flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${activeChapterId === c.id ? "bg-white/[0.07]" : "hover:bg-white/[0.04]"}`}
+          >
+            <div className="w-5 flex items-center justify-center shrink-0">
+              {activeChapterId === c.id && isPlaying ? (
+                <Pause className="w-3 h-3 text-[#2DD9C8] fill-[#2DD9C8]" />
+              ) : activeChapterId === c.id ? (
+                <Play className="w-3 h-3 text-[#2DD9C8] fill-[#2DD9C8]" />
+              ) : (
+                <span className="text-xs text-[#7d7891]">{i + 1}</span>
+              )}
+            </div>
+            <span className={`text-sm flex-1 truncate ${activeChapterId === c.id ? "text-[#2DD9C8]" : "text-[#EDEBF7]"}`}>{c.title}</span>
             <span className="text-xs text-[#7d7891]">{c.minutes} min</span>
-          </div>
+          </button>
         ))}
       </div>
     </div>
@@ -1167,9 +1213,36 @@ function AudiobookDetailView({ book, onBack }) {
 }
 
 function ArtistView({ name, onBack, onPlaySong, activeSong, isPlaying, liked, onLike, onQueue }) {
-  const colors = PALETTE_BY_ARTIST[name];
-  const topSongs = SONGS.filter((s) => s.artist === name);
+  const colors = PALETTE_BY_ARTIST[name] || ['#8B5CF6', '#2DD9C8'];
+  const localSongs = useMemo(() => SONGS.filter((s) => s.artist === name), [name]);
+  const [topSongs, setTopSongs] = useState(localSongs);
+  const [loading, setLoading] = useState(false);
   const listeners = useMemo(() => 800000 + (name.length * 61234) % 4200000, [name]);
+
+  useEffect(() => {
+    if (localSongs.length === 0) {
+      setLoading(true);
+      fetch(`/api/search?q=${encodeURIComponent(name)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data)) {
+            setTopSongs(data);
+          } else {
+            setTopSongs([]);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch artist songs:", err);
+          setTopSongs([]);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setTopSongs(localSongs);
+    }
+  }, [name, localSongs]);
+
+  const bio = ARTIST_BIOS[name] || `Check out the top tracks and latest releases from ${name}. Stream their best hits and dive into their catalog.`;
+
   return (
     <div>
       <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-[#9490A8] hover:text-[#EDEBF7] mb-6">
@@ -1186,7 +1259,7 @@ function ArtistView({ name, onBack, onPlaySong, activeSong, isPlaying, liked, on
           <p className="text-xs text-white/70 mt-1">{listeners.toLocaleString()} monthly listeners</p>
         </div>
       </div>
-      <p className="text-sm text-[#9490A8] max-w-xl mb-6">{ARTIST_BIOS[name]}</p>
+      <p className="text-sm text-[#9490A8] max-w-xl mb-6">{bio}</p>
       <button
         onClick={() => topSongs.length && onPlaySong(topSongs[0], topSongs)}
         className="w-12 h-12 rounded-full bg-[#2DD9C8] flex items-center justify-center mb-6 hover:scale-105 transition-transform shadow-[0_0_24px_rgba(45,217,200,0.4)]"
@@ -1195,19 +1268,27 @@ function ArtistView({ name, onBack, onPlaySong, activeSong, isPlaying, liked, on
       </button>
       <Eyebrow>Popular</Eyebrow>
       <div className="flex flex-col gap-0.5 mb-8">
-        {topSongs.map((s, i) => (
-          <SongRow
-            key={s.id}
-            song={s}
-            index={i + 1}
-            isActive={activeSong?.id === s.id}
-            isPlaying={isPlaying}
-            liked={liked.has(s.id)}
-            onPlay={() => onPlaySong(s, topSongs)}
-            onLike={onLike}
-            onQueue={onQueue}
-          />
-        ))}
+        {loading ? (
+          <div className="flex justify-center py-8">
+            <div className="w-6 h-6 border-2 border-[#2DD9C8] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : topSongs.length > 0 ? (
+          topSongs.map((s, i) => (
+            <SongRow
+              key={s.id}
+              song={s}
+              index={i + 1}
+              isActive={activeSong?.id === s.id}
+              isPlaying={isPlaying}
+              liked={liked.has(s.id)}
+              onPlay={() => onPlaySong(s, topSongs)}
+              onLike={onLike}
+              onQueue={onQueue}
+            />
+          ))
+        ) : (
+          <p className="text-sm text-[#7d7891] py-4 text-center">No songs found for this artist.</p>
+        )}
       </div>
       <Eyebrow>Similar artists</Eyebrow>
       <div className="flex gap-4 overflow-x-auto pb-2">
@@ -1228,7 +1309,7 @@ function WrappedView({ likedSongs }) {
   const cards = [
     {
       colors: PALETTE_BY_ARTIST["Nova Wren"],
-      eyebrow: "Your Babloo Wrapped",
+      eyebrow: "Your SAREGAMA Wrapped",
       big: "2026",
       sub: "was a year in static, static, and more static. Let's look back.",
     },
@@ -1292,8 +1373,8 @@ function WrappedView({ likedSongs }) {
   );
 }
 
-function ProfileView({ playlists, likedSongs, history }) {
-  const totalMinutes = history.reduce((a, s) => a + s.duration, 0) / 60;
+function ProfileView({ playlists, likedSongs, history, user, onLogout }) {
+  const totalMinutes = history.reduce((a, s) => a + (s.duration || 0), 0) / 60;
   return (
     <div>
       <div className="flex items-center gap-5 mb-8">
@@ -1302,11 +1383,14 @@ function ProfileView({ playlists, likedSongs, history }) {
         </div>
         <div>
           <Eyebrow>Profile</Eyebrow>
-          <h1 className="text-3xl font-black text-[#EDEBF7] tracking-tight mb-1">You</h1>
-          <div className="flex items-center gap-4 text-xs text-[#9490A8]">
-            <span><span className="text-[#EDEBF7] font-semibold">128</span> followers</span>
-            <span><span className="text-[#EDEBF7] font-semibold">64</span> following</span>
-          </div>
+          <h1 className="text-3xl font-black text-[#EDEBF7] tracking-tight mb-1">{user?.name || 'You'}</h1>
+          <div className="text-sm text-[#9490A8] mb-2">{user?.email || ''}</div>
+          <button
+            onClick={onLogout}
+            className="text-xs font-semibold px-4 py-1.5 rounded-full border border-white/10 text-[#9490A8] hover:text-[#FF6B81] hover:border-[#FF6B81]/40 transition-colors"
+          >
+            Logout
+          </button>
         </div>
       </div>
 
@@ -1443,10 +1527,21 @@ function SleepTimerModal({ value, onSelect, onClose }) {
   );
 }
 
-function EqualizerModal({ onClose }) {
+function EqualizerModal({ onClose, bands, setBands }) {
   const [preset, setPreset] = useState("Flat");
-  const [bands, setBands] = useState({ bass: 0, mid: 0, treble: 0 });
-  const presets = ["Flat", "Bass Boost", "Vocal", "Treble Boost"];
+  const presetValues = {
+    "Flat": { bass: 0, mid: 0, treble: 0 },
+    "Bass Boost": { bass: 8, mid: 0, treble: -2 },
+    "Vocal": { bass: -3, mid: 6, treble: 2 },
+    "Treble Boost": { bass: -2, mid: 0, treble: 8 },
+  };
+  const presets = Object.keys(presetValues);
+
+  function applyPreset(name) {
+    setPreset(name);
+    setBands(presetValues[name]);
+  }
+
   return (
     <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
       <Glass className="rounded-2xl p-5 w-full max-w-sm mb-4 sm:mb-0" onClick={(e) => e.stopPropagation()}>
@@ -1456,7 +1551,7 @@ function EqualizerModal({ onClose }) {
         </div>
         <div className="flex gap-1.5 mb-5 flex-wrap">
           {presets.map((p) => (
-            <button key={p} onClick={() => setPreset(p)} className={`px-3 py-1 rounded-full text-xs font-medium ${preset === p ? "bg-[#8B5CF6] text-white" : "bg-white/[0.06] text-[#9490A8]"}`}>
+            <button key={p} onClick={() => applyPreset(p)} className={`px-3 py-1 rounded-full text-xs font-medium ${preset === p ? "bg-[#8B5CF6] text-white" : "bg-white/[0.06] text-[#9490A8]"}`}>
               {p}
             </button>
           ))}
@@ -1469,7 +1564,7 @@ function EqualizerModal({ onClose }) {
             </div>
             <input
               type="range" min="-10" max="10" value={bands[band]}
-              onChange={(e) => setBands((b) => ({ ...b, [band]: +e.target.value }))}
+              onChange={(e) => { setPreset("Custom"); setBands((b) => ({ ...b, [band]: +e.target.value })); }}
               className="w-full accent-[#8B5CF6]"
             />
           </div>
@@ -1505,9 +1600,18 @@ function NowPlayingScreen({ song, isPlaying, progress, onToggle, onNext, onPrev,
           </div>
 
           <div className="mt-6">
-            <div className="h-1 rounded-full bg-white/10 overflow-hidden">
-              <div className="h-full bg-[#EDEBF7] rounded-full transition-[width] duration-200" style={{ width: `${pct}%` }} />
-            </div>
+            <input
+              type="range"
+              min="0"
+              max={song.duration || 0}
+              step="0.1"
+              value={progress}
+              onChange={(e) => {
+                const t = +e.target.value;
+                if (window.__bablooAudioRef) window.__bablooAudioRef.currentTime = t;
+              }}
+              className="w-full h-1 accent-[#EDEBF7] cursor-pointer"
+            />
             <div className="flex justify-between text-[10px] text-[#7d7891] mt-1.5">
               <span>{fmtTime(progress)}</span>
               <span>{fmtTime(song.duration)}</span>
@@ -1585,9 +1689,18 @@ function PlayerBar({ song, isPlaying, progress, onToggle, onNext, onPrev, liked,
         </div>
         <div className="flex items-center gap-2 w-full">
           <span className="text-[10px] text-[#7d7891] w-8 text-right">{fmtTime(progress)}</span>
-          <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-            <div className="h-full bg-[#EDEBF7] rounded-full transition-[width] duration-200" style={{ width: `${pct}%` }} />
-          </div>
+          <input
+            type="range"
+            min="0"
+            max={song.duration || 0}
+            step="0.1"
+            value={progress}
+            onChange={(e) => {
+              const t = +e.target.value;
+              if (window.__bablooAudioRef) window.__bablooAudioRef.currentTime = t;
+            }}
+            className="flex-1 h-1 accent-[#EDEBF7] cursor-pointer"
+          />
           <span className="text-[10px] text-[#7d7891] w-8">{fmtTime(song.duration)}</span>
         </div>
       </div>
@@ -1733,14 +1846,102 @@ function CreatePlaylistModal({ onClose, onCreate }) {
   );
 }
 
+function AddToPlaylistModal({ song, playlists, onAdd, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4" onClick={onClose}>
+      <Glass className="rounded-2xl p-6 w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-[#EDEBF7] mb-1">Add to playlist</h3>
+        <p className="text-xs text-[#9490A8] mb-4 truncate">"{song.title}" by {song.artist}</p>
+        <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
+          {playlists.map((p) => {
+            const alreadyIn = p.songs?.some((s) => s.id === song.id);
+            return (
+              <button
+                key={p.id}
+                onClick={() => !alreadyIn && onAdd(p.id, song)}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors ${
+                  alreadyIn ? "opacity-40 cursor-not-allowed" : "hover:bg-white/[0.06]"
+                }`}
+                disabled={alreadyIn}
+              >
+                <CoverArt colors={p.cover} size="w-8 h-8" rounded="rounded-md" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-[#EDEBF7] truncate">{p.name}</div>
+                  <div className="text-[10px] text-[#9490A8]">{p.songs?.length || 0} songs</div>
+                </div>
+                {alreadyIn && <Check className="w-3.5 h-3.5 text-[#2DD9C8]" />}
+              </button>
+            );
+          })}
+          {playlists.length === 0 && (
+            <div className="text-sm text-[#7d7891] py-4 text-center">No playlists yet. Create one first!</div>
+          )}
+        </div>
+        <div className="flex justify-end mt-4">
+          <button onClick={onClose} className="px-4 py-2 rounded-full text-xs font-semibold text-[#9490A8] hover:text-[#EDEBF7]">Cancel</button>
+        </div>
+      </Glass>
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------- */
 /*  App shell                                                              */
 /* ---------------------------------------------------------------------- */
 
-const DEMO_SPEED = 12; // 1 "displayed" second advances this many real ms per tick — playback feels lively without long waits
-
 export default function BablooApp() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      const token = getToken();
+      if (!token) {
+        setAuthLoading(false);
+        return;
+      }
+      try {
+        const res = await apiFetch('/api/auth/me');
+        setUser(res.user);
+        
+        // Fetch persisted data
+        try {
+          const [pl, lk, hist] = await Promise.all([
+            apiFetch('/api/me/playlists').catch(()=>[]),
+            apiFetch('/api/me/liked-songs').catch(()=>[]),
+            apiFetch('/api/me/history').catch(()=>[])
+          ]);
+          if (pl && pl.length) {
+            setPlaylists(pl.map(p => ({
+              ...p,
+              cover: p.cover_image ? p.cover_image.split(',') : (p.cover || ['#8B5CF6', '#2DD9C8']),
+              songs: p.songs || []
+            })));
+          }
+          if (lk && lk.length) {
+            setLiked(new Set(lk.map(s => s.id)));
+            setLikedData(lk.map(s => ({...s, duration: s.duration || 180, colors: s.colors || ['#8B5CF6', '#2DD9C8']})));
+          }
+          if (hist && hist.length) {
+            setPlayHistory(hist.map(s => ({...s, duration: s.duration || 180, colors: s.colors || ['#8B5CF6', '#2DD9C8']})));
+          }
+          
+        } catch (e) {
+          console.error('Failed fetching data', e);
+        }
+      } catch (err) {
+        removeToken();
+        setUser(null);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    initAuth();
+  }, []);
+
   const [stage, setStage] = useState(() => localStorage.getItem('babloo_stage') || "welcome"); // welcome | onboarding | app
+
   const [view, setView] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
@@ -1770,12 +1971,35 @@ export default function BablooApp() {
 
   const [song, setSong] = useState(null);
   const [activeEpisodeId, setActiveEpisodeId] = useState(null);
+  const [activeChapterId, setActiveChapterId] = useState(null);
   const [queueList, setQueueList] = useState([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [panel, setPanel] = useState(null);
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(0);
+
+  // Sync podcast/audiobook progress
+  useEffect(() => {
+    let interval;
+    if (isPlaying && (activeEpisodeId || activeChapterId)) {
+      interval = setInterval(() => {
+        if (activeEpisodeId) {
+          apiFetch('/api/me/podcasts/progress', {
+            method: 'POST',
+            body: JSON.stringify({ podcastId: openPodcastId || 'unknown', episodeId: activeEpisodeId, progress: Math.floor(progress) })
+          }).catch(console.error);
+        } else if (activeChapterId) {
+          apiFetch('/api/me/audiobooks/progress', {
+            method: 'POST',
+            body: JSON.stringify({ bookId: openAudiobookId || 'unknown', chapterId: activeChapterId, progress: Math.floor(progress) })
+          }).catch(console.error);
+        }
+      }, 5000);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, activeEpisodeId, activeChapterId, progress, openPodcastId, openAudiobookId]);
+
   const [playHistory, setPlayHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem('babloo_history') || '[]'); } catch { return []; }
   });
@@ -1811,12 +2035,66 @@ export default function BablooApp() {
   const audioRef = useRef(null);
   const [vol, setVol] = useState(70);
 
+  // Equalizer state (lifted from EqualizerModal so it persists)
+  const [eqBands, setEqBands] = useState({ bass: 0, mid: 0, treble: 0 });
+  const eqNodesRef = useRef(null); // { source, bass, mid, treble, ctx }
+
+  // Expose audioRef globally for seek bars and equalizer
+  useEffect(() => {
+    if (audioRef.current) {
+      window.__bablooAudioRef = audioRef.current;
+    }
+  });
+
   // Sync Volume
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.volume = vol / 100;
     }
   }, [vol, song]);
+
+  // Web Audio API Equalizer setup
+  useEffect(() => {
+    if (!audioRef.current || eqNodesRef.current) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const source = ctx.createMediaElementSource(audioRef.current);
+      
+      const bass = ctx.createBiquadFilter();
+      bass.type = 'lowshelf';
+      bass.frequency.value = 200;
+      bass.gain.value = 0;
+      
+      const mid = ctx.createBiquadFilter();
+      mid.type = 'peaking';
+      mid.frequency.value = 1000;
+      mid.Q.value = 1;
+      mid.gain.value = 0;
+      
+      const treble = ctx.createBiquadFilter();
+      treble.type = 'highshelf';
+      treble.frequency.value = 4000;
+      treble.gain.value = 0;
+      
+      source.connect(bass);
+      bass.connect(mid);
+      mid.connect(treble);
+      treble.connect(ctx.destination);
+      
+      eqNodesRef.current = { source, bass, mid, treble, ctx };
+    } catch (e) {
+      console.log('Web Audio EQ setup skipped:', e.message);
+    }
+  }, []);
+
+  // Sync EQ band values to Web Audio nodes
+  useEffect(() => {
+    if (!eqNodesRef.current) return;
+    const { bass, mid, treble } = eqNodesRef.current;
+    bass.gain.value = eqBands.bass;
+    mid.gain.value = eqBands.mid;
+    treble.gain.value = eqBands.treble;
+  }, [eqBands]);
 
   // Sync audio src when song changes
   useEffect(() => {
@@ -1828,6 +2106,9 @@ export default function BablooApp() {
       audioRef.current.load();
     }
     if (isPlaying) {
+      if (eqNodesRef.current?.ctx.state === 'suspended') {
+        eqNodesRef.current.ctx.resume();
+      }
       audioRef.current.play().catch(e => console.log("Playback error:", e));
     }
   }, [song]);
@@ -1836,6 +2117,9 @@ export default function BablooApp() {
   useEffect(() => {
     if (audioRef.current) {
       if (isPlaying) {
+        if (eqNodesRef.current?.ctx.state === 'suspended') {
+          eqNodesRef.current.ctx.resume();
+        }
         audioRef.current.play().catch(e => console.log("Playback error:", e));
       } else {
         audioRef.current.pause();
@@ -1849,6 +2133,7 @@ export default function BablooApp() {
     setIsPlaying(true);
     contextRef.current = context.length ? context : [s];
     setPlayHistory((h) => [s, ...h.filter((x) => x.id !== s.id)].slice(0, 40));
+    apiFetch('/api/me/history', { method: 'POST', body: JSON.stringify({ song: s }) }).catch(console.error);
   }
 
   function handleToggle() {
@@ -1910,6 +2195,7 @@ export default function BablooApp() {
       }
       return next;
     });
+    apiFetch(`/api/me/liked-songs`, { method: 'POST', body: JSON.stringify({ song: songObj }) }).catch(console.error);
   }
 
   function addToQueue(s) {
@@ -1940,16 +2226,68 @@ export default function BablooApp() {
     playSong(pseudoSong, [pseudoSong]);
   }
 
+  function playChapter(ch, book) {
+    const pseudoSong = {
+      id: ch.id,
+      title: ch.title,
+      artist: book.author,
+      duration: ch.minutes * 60,
+      colors: book.colors,
+      lyrics: [],
+    };
+    setActiveChapterId(ch.id);
+    playSong(pseudoSong, [pseudoSong]);
+  }
+
   function updatePlaylist(id, patch) {
     setPlaylists((p) => p.map((pl) => (pl.id === id ? { ...pl, ...patch } : pl)));
   }
 
-  function createPlaylist(name) {
+  async function createPlaylist(name) {
     const cols = Object.values(PALETTE_BY_ARTIST)[playlists.length % 8];
-    setPlaylists((p) => [...p, { id: `p${Date.now()}`, name, desc: "Your new playlist.", songs: [], cover: cols }]);
     setShowCreate(false);
     setView("library");
+    
+    // Optimistic update
+    const tempId = `p${Date.now()}`;
+    const pl = { id: tempId, name, desc: "Your new playlist.", songs: [], cover: cols };
+    setPlaylists((p) => [...p, pl]);
+    
+    try {
+      const res = await apiFetch('/api/me/playlists', {
+        method: 'POST',
+        body: JSON.stringify({ name, description: "Your new playlist.", cover_image: cols.join(',') })
+      });
+      // Update with real ID from backend
+      if (res && res.id) {
+        setPlaylists((p) => p.map(p => p.id === tempId ? { ...p, id: res.id } : p));
+      }
+    } catch (e) {
+      console.error(e);
+    }
   }
+
+  // Add to playlist state and function
+  const [addToPlaylistSong, setAddToPlaylistSong] = useState(null);
+
+  function addSongToPlaylist(playlistId, songObj) {
+    setPlaylists((prev) =>
+      prev.map((pl) => {
+        if (pl.id !== playlistId) return pl;
+        if (pl.songs.some((s) => s.id === songObj.id)) return pl;
+        return { ...pl, songs: [...pl.songs, songObj] };
+      })
+    );
+    setAddToPlaylistSong(null);
+    apiFetch(`/api/me/playlists/${playlistId}/songs`, { method: 'POST', body: JSON.stringify({ song: songObj }) }).catch(console.error);
+  }
+
+  if (authLoading) return (
+    <div className="min-h-screen bg-[#08070C] flex items-center justify-center text-white">
+      <div className="animate-pulse text-xl font-semibold tracking-wider">SAREGAMA</div>
+    </div>
+  );
+  if (!user) return <LandingPage onLogin={(u) => setUser(u)} />;
 
   if (stage === "welcome") return <WelcomeScreen onEnter={setStage} />;
   if (stage === "onboarding") return <OnboardingScreen onDone={() => setStage("app")} />;
@@ -2009,19 +2347,27 @@ export default function BablooApp() {
       />
     );
   } else if (openAudiobookId && openAudiobook) {
-    content = <AudiobookDetailView book={openAudiobook} onBack={clearDetails} />;
+    content = (
+      <AudiobookDetailView 
+        book={openAudiobook} 
+        onBack={clearDetails} 
+        onPlayChapter={playChapter}
+        activeChapterId={activeChapterId}
+        isPlaying={isPlaying}
+      />
+    );
   } else if (view === "home") {
     content = <HomeView playlists={playlists} greeting={greeting} onPlaySong={playSong} onOpenPlaylist={setOpenPlaylistId} />;
   } else if (view === "search") {
-    content = <SearchView query={query} setQuery={setQuery} onPlaySong={playSong} liked={liked} onLike={toggleLike} onQueue={addToQueue} />;
+    content = <SearchView query={query} setQuery={setQuery} onPlaySong={playSong} liked={liked} onLike={toggleLike} onQueue={addToQueue} onAddToPlaylist={setAddToPlaylistSong} />;
   } else if (view === "library") {
     content = <LibraryView playlists={playlists} onOpenPlaylist={setOpenPlaylistId} onOpenArtist={setOpenArtistName} />;
   } else if (view === "liked") {
-    content = <LikedView likedSongs={likedSongs} activeSong={song} isPlaying={isPlaying} liked={liked} onPlaySong={playSong} onLike={toggleLike} onQueue={addToQueue} />;
+    content = <LikedView likedSongs={likedSongs} activeSong={song} isPlaying={isPlaying} liked={liked} onPlaySong={playSong} onLike={toggleLike} onQueue={addToQueue} onAddToPlaylist={setAddToPlaylistSong} />;
   } else if (view === "history") {
-    content = <HistoryView history={playHistory} activeSong={song} isPlaying={isPlaying} liked={liked} onPlaySong={playSong} onLike={toggleLike} onQueue={addToQueue} />;
+    content = <HistoryView history={playHistory} activeSong={song} isPlaying={isPlaying} liked={liked} onPlaySong={playSong} onLike={toggleLike} onQueue={addToQueue} onAddToPlaylist={setAddToPlaylistSong} />;
   } else if (view === "profile") {
-    content = <ProfileView playlists={playlists} likedSongs={likedSongs} history={playHistory} />;
+    content = <ProfileView playlists={playlists} likedSongs={likedSongs} history={playHistory} user={user} onLogout={() => { removeToken(); setUser(null); }} />;
   } else if (view === "podcasts") {
     content = <PodcastsView onOpenPodcast={setOpenPodcastId} />;
   } else if (view === "audiobooks") {
@@ -2053,10 +2399,9 @@ export default function BablooApp() {
         <main className="flex-1 min-w-0 flex flex-col">
           {/* mobile top bar */}
           <div className="md:hidden flex items-center gap-3 px-4 pt-4">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#2DD9C8] flex items-center justify-center">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
+            <div className="h-10 flex items-center -ml-2">
+              <img src="/logo.png" alt="SAREGAMA" className="h-full object-contain scale-110 origin-left" />
             </div>
-            <span className="font-black text-sm">babloo</span>
             <div className="ml-auto flex gap-4">
               {[["home", Home], ["search", Search], ["library", Library]].map(([id, Icon]) => (
                 <button key={id} onClick={() => { clearDetails(); setView(id); }} className={view === id && !openPlaylistId ? "text-[#2DD9C8]" : "text-[#9490A8]"}>
@@ -2119,7 +2464,7 @@ export default function BablooApp() {
         setShuffle={setShuffle}
         repeat={repeat}
         setRepeat={setRepeat}
-        onExpand={() => setShowNowPlaying(true)}
+        onExpand={() => setIsExpanded(true)}
         vol={vol}
         setVol={setVol}
       />
@@ -2129,10 +2474,11 @@ export default function BablooApp() {
       )}
 
       {showCreate && <CreatePlaylistModal onClose={() => setShowCreate(false)} onCreate={createPlaylist} />}
+      {addToPlaylistSong && <AddToPlaylistModal song={addToPlaylistSong} playlists={playlists} onAdd={addSongToPlaylist} onClose={() => setAddToPlaylistSong(null)} />}
       {showNotifications && <NotificationsDropdown onClose={() => setShowNotifications(false)} />}
       {showDevices && <DeviceSwitcherModal activeDevice={activeDevice} onSelect={setActiveDevice} onClose={() => setShowDevices(false)} />}
       {showSleepTimer && <SleepTimerModal value={sleepMinutes} onSelect={setSleepMinutes} onClose={() => setShowSleepTimer(false)} />}
-      {showEqualizer && <EqualizerModal onClose={() => setShowEqualizer(false)} />}
+      {showEqualizer && <EqualizerModal onClose={() => setShowEqualizer(false)} bands={eqBands} setBands={setEqBands} />}
       {showNowPlaying && song && (
         <NowPlayingScreen
           song={song}
@@ -2155,12 +2501,35 @@ export default function BablooApp() {
           onOpenEq={() => setShowEqualizer(true)}
         />
       )}
+      {isExpanded && (
+        <ExpandedPlayer
+          song={song}
+          isPlaying={isPlaying}
+          progress={progress}
+          duration={song?.duration}
+          onPlayPause={handleToggle}
+          onSeek={(t) => { if (window.__bablooAudioRef) window.__bablooAudioRef.currentTime = t; }}
+          onNext={handleNext}
+          onPrev={handlePrev}
+          onClose={() => setIsExpanded(false)}
+          liked={liked}
+          onToggleLike={toggleLike}
+          onShuffle={() => setShuffle(!shuffle)}
+          onRepeat={() => setRepeat((repeat + 1) % 3)}
+          shuffle={shuffle}
+          repeat={repeat}
+          onAddPlaylist={setAddToPlaylistSong}
+        />
+      )}
       {/* Hidden Real Audio Engine — always mounted so audioRef is stable */}
       <audio 
         ref={audioRef}
         onTimeUpdate={(e) => setProgress(e.target.currentTime)}
         onLoadedMetadata={(e) => {
-          if (song) song.duration = e.target.duration;
+          const realDuration = e.target.duration;
+          if (realDuration && isFinite(realDuration)) {
+            setSong(prev => prev ? { ...prev, duration: realDuration } : prev);
+          }
         }}
         onEnded={handleNext}
         onError={(e) => console.error('Audio playback error:', e.target.error)}
