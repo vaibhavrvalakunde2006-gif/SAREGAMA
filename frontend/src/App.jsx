@@ -1921,21 +1921,9 @@ function AddToPlaylistModal({ song, playlists, onAdd, onClose }) {
 /* ---------------------------------------------------------------------- */
 
 export default function BablooApp() {
-  const [stage, setStage] = useState("welcome");
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-
-  // Layout states
-  const [view, setView] = useState("home"); // home, search, library, profile, etc.
-  const [panel, setPanel] = useState(null); // lyrics, queue, activity, devices
-  const [collapsed, setCollapsed] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  
-  // Navigation details
-  const [openPlaylistId, setOpenPlaylistId] = useState(null);
-  const [openArtistName, setOpenArtistName] = useState(null);
-  const [openPodcastId, setOpenPodcastId] = useState(null);
-  const [openAudiobookId, setOpenAudiobookId] = useState(null);
   const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
