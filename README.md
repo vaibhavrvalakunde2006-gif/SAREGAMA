@@ -159,37 +159,77 @@ SAREGAMA uses **SQLite** (via `better-sqlite3`) with WAL mode for fast concurren
 
 ---
 
-## 🚀 Getting Started (Local Development)
+## 🚀 Running Locally
 
 ### Prerequisites
-- **Node.js** v18 or higher
-- **npm** (comes with Node.js)
+- **Node.js** v18 or higher ([download here](https://nodejs.org/))
+- **npm** (comes bundled with Node.js)
+- **Git** ([download here](https://git-scm.com/))
 
-### 1. Clone the Repository
+### ⚡ Quick Start (One Command)
+
 ```bash
 git clone https://github.com/vaibhavrvalakunde2006-gif/SAREGAMA.git
 cd SAREGAMA
+npm install
+npm run dev
 ```
 
-### 2. Install & Start the Backend
+This single `npm run dev` command uses `concurrently` to start **both** the backend (port 3001) and frontend dev server (port 5173) at the same time. Open **http://localhost:5173** in your browser and you're good to go!
+
+### 🔧 Manual Start (Two Terminals)
+
+If you prefer to run the backend and frontend separately for easier debugging:
+
+**Terminal 1 — Backend:**
 ```bash
 cd backend
 npm install
 node index.js
 ```
-The backend will start on **http://localhost:3001**
+> ✅ You should see: `SAREGAMA YouTube Engine running on http://localhost:3001`
 
-### 3. Install & Start the Frontend
-Open a **new terminal**:
+**Terminal 2 — Frontend:**
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-The frontend will start on **http://localhost:5173**
+> ✅ You should see: `Local: http://localhost:5173/`
 
-### 4. Open in Browser
-Navigate to `http://localhost:5173` and start streaming! 🎶
+### 🏭 Production Build (Local Preview)
+
+To test exactly what gets deployed to Render:
+
+```bash
+# From the project root
+npm install                       # Install all dependencies
+npm run build                     # Build the React frontend into frontend/dist/
+npm start                         # Start Express serving the built frontend
+```
+
+Open **http://localhost:3001** — the backend now serves the compiled React app as static files (no separate frontend dev server needed).
+
+### 🔑 Environment Variables
+
+Create a `backend/.env` file for configuration (optional):
+
+```env
+PORT=3001                         # Server port (default: 3001)
+JWT_SECRET=your-secret-key        # Secret key for JWT authentication
+```
+
+> **Note:** The app works out of the box without any `.env` file. The YouTube Music API does not require an API key — `youtubei.js` handles authentication internally.
+
+### 🐛 Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| `Cannot find module 'better-sqlite3'` | Run `npm install` inside the `backend/` folder — this native module needs to compile |
+| `EADDRINUSE: port 3001` | Another process is using port 3001. Kill it or set `PORT=3002` in your `.env` |
+| Songs don't play locally | Make sure the backend is running (`node index.js`) — the frontend proxies audio through it |
+| `yt-dlp` errors | Run `npm update youtube-dl-exec` in `backend/` to get the latest yt-dlp binary |
+| Frontend shows blank page | Clear browser cache and restart the Vite dev server (`npm run dev`) |
 
 ---
 
