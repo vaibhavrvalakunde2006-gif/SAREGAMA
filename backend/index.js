@@ -83,13 +83,26 @@ app.get('/api/search', async (req, res) => {
       .filter(item => item.type === 'MusicResponsiveListItem' && (item.id || item.video_id))
       .map(formatYtSong);
 
-    cache.set(cacheKey, songs);
-    songs.forEach(s => cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400));
-    res.json(songs);
+    // Pre-match ALL songs to JioSaavn BEFORE responding (wait max 3s total)
+    // This guarantees the JioSaavn ID is available when the user clicks play
+    try {
+      await Promise.race([
+        preMatchAllToSaavn(songs),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+    } catch {}
     
-    // Pre-match songs to JioSaavn in the background (non-blocking)
-    // This caches the exact JioSaavn song ID so streaming is 100% accurate
-    preMatchAllToSaavn(songs).catch(() => {});
+    // Embed JioSaavn IDs into audioStream URLs
+    songs.forEach(s => {
+      const saavnId = cache.get(`saavn-id:${s.id}`);
+      if (saavnId) {
+        s.audioStream = `/api/stream/${s.id}?saavnId=${saavnId}`;
+      }
+      cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400);
+    });
+
+    cache.set(cacheKey, songs);
+    res.json(songs);
   } catch (error) {
     console.error('Search Error:', error.message);
     res.status(500).json({ error: 'Search failed' });
@@ -115,11 +128,23 @@ app.get('/api/browse/:category', async (req, res) => {
       .filter(item => item.type === 'MusicResponsiveListItem' && (item.id || item.video_id))
       .map(formatYtSong);
 
-    cache.set(cacheKey, songs);
-    songs.forEach(s => cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400));
-    res.json(songs);
+    try {
+      await Promise.race([
+        preMatchAllToSaavn(songs),
+        new Promise(resolve => setTimeout(resolve, 3000))
+      ]);
+    } catch {}
     
-    preMatchAllToSaavn(songs).catch(() => {});
+    songs.forEach(s => {
+      const saavnId = cache.get(`saavn-id:${s.id}`);
+      if (saavnId) {
+        s.audioStream = `/api/stream/${s.id}?saavnId=${saavnId}`;
+      }
+      cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400);
+    });
+
+    cache.set(cacheKey, songs);
+    res.json(songs);
   } catch (error) {
     console.error('Browse Error:', error.message);
     res.status(500).json({ error: 'Browse failed' });
@@ -275,13 +300,13 @@ app.get('/api/stream/:identifier', async (req, res) => {
         try {
           let saavnUrl;
           
-          // BEST PATH: Use pre-cached JioSaavn ID (set during search/browse)
-          const saavnId = cache.get(`saavn-id:${identifier}`);
+          // BEST PATH: saavnId passed directly in URL (embedded by search/browse endpoint)
+          const saavnId = req.query.saavnId || cache.get(`saavn-id:${identifier}`);
           if (saavnId) {
-            console.log(`[Stream] Using pre-matched JioSaavn ID: ${saavnId}`);
+            console.log(`[Stream] Using JioSaavn ID: ${saavnId}`);
             saavnUrl = await getStreamBySaavnId(saavnId);
           } else {
-            // FALLBACK: Search by title at stream time (if user navigated directly)
+            // FALLBACK: Search by title at stream time
             let meta = cache.get(`songmeta:${identifier}`);
             
             if (!meta && req.query.title) {
