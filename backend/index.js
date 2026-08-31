@@ -138,29 +138,33 @@ function decryptSaavnUrl(encryptedUrl) {
 }
 
 async function getSaavnStreamUrl(title, artist) {
-  // Step 1: Search JioSaavn for the song
-  const searchQuery = `${title} ${artist}`.trim();
-  const searchUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&query=${encodeURIComponent(searchQuery)}&_format=json&_marker=0&ctx=wap6dot0`;
+  // Clean up YouTube titles (remove "(Official Video)", "[Lyric Video]", etc.)
+  const cleanTitle = title.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim();
+  const cleanArtist = artist.replace(/ - Topic$/, '').trim();
+  
+  const searchQuery = `${cleanTitle} ${cleanArtist}`.trim();
+  const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(searchQuery)}&n=5&p=1&_format=json&_marker=0&ctx=wap6dot0`;
   
   const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
   const searchData = await searchRes.json();
   
-  const firstSong = searchData?.songs?.data?.[0];
-  if (!firstSong) throw new Error('Song not found on JioSaavn');
+  const results = searchData.results || [];
+  if (!results.length) throw new Error('Song not found on JioSaavn');
   
-  // Step 2: Get full song details (contains encrypted media URL)
-  const detailsUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0%3F_marker%3D0&_format=json&pids=${firstSong.id}`;
+  // Find the best match (try to match artist if possible, otherwise use the first result)
+  let bestSong = results[0];
+  for (const song of results) {
+    if (song.primary_artists && song.primary_artists.toLowerCase().includes(cleanArtist.toLowerCase())) {
+      bestSong = song;
+      break;
+    }
+  }
   
-  const detailsRes = await fetch(detailsUrl, { signal: AbortSignal.timeout(5000) });
-  const detailsData = await detailsRes.json();
-  
-  const songDetails = detailsData.songs?.[0] || Object.values(detailsData)[0];
-  if (!songDetails?.encrypted_media_url && !songDetails?.media_preview_url) {
+  if (!bestSong.encrypted_media_url) {
     throw new Error('No media URL from JioSaavn');
   }
   
-  // Step 3: Decrypt the media URL
-  const streamUrl = decryptSaavnUrl(songDetails.encrypted_media_url);
+  const streamUrl = decryptSaavnUrl(bestSong.encrypted_media_url);
   return streamUrl;
 }
 
