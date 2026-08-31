@@ -4,12 +4,6 @@
 
 > 🌐 **Live Demo:** [https://saregama-lmt4.onrender.com](https://saregama-lmt4.onrender.com)
 
-> [!WARNING]
-> **Song playback is currently not available on the deployed website.** YouTube blocks audio streaming from cloud server IPs. We are actively working on a fix — stay tuned!
-
-> [!TIP]
-> **Want to enjoy the full experience right now?** Clone the repo and run it locally — songs play perfectly on your own machine! See the [Running Locally](#-running-locally) section below.
-
 ---
 
 ## ✨ Features
@@ -91,13 +85,16 @@ Here's what happens when you search for a song and play it:
 
 4. **Play Request:** When the user clicks a song, the frontend sets the `<audio>` tag's `src` to `/api/stream/{videoId}`.
 
-5. **Stream Proxy:** The backend receives this request and uses `youtube-dl-exec` (a Node.js wrapper around [yt-dlp](https://github.com/yt-dlp/yt-dlp)) to extract the best-quality audio-only stream URL from YouTube.
+5. **Dual-Engine Streaming Proxy:** 
+   - **Attempt 1 (Local Network):** The backend tries to use `youtube-dl-exec` (yt-dlp) to extract the best-quality audio stream directly from YouTube's CDN and pipe it to the client. This works flawlessly when running the app locally.
+   - **Attempt 2 (Cloud Fallback):** YouTube aggressively blocks datacenter IPs (like Render). If the backend detects a block (or a timeout), it instantly activates the **JioSaavn Fallback Engine**.
+   - It performs an advanced background search on JioSaavn using the YouTube metadata.
+   - It intercepts JioSaavn's `encrypted_media_url` and decrypts it natively in Node.js using `crypto-js` (DES-ECB).
+   - Finally, it issues an HTTP 302 Redirect to the frontend, pointing your browser directly to JioSaavn's 320kbps CDN. Your browser fetches the audio using your home IP address, completely bypassing JioSaavn's datacenter blocks!
 
-6. **Audio Piping:** The backend fetches the raw audio bytes from YouTube's CDN and **pipes them directly** to the browser through the Express response. This proxy approach solves CORS issues and hides the YouTube URL from the client.
+6. **Seeking Support:** For YouTube streams, the player supports seeking via HTTP Range requests (HTTP 206). For JioSaavn, the browser handles seeking natively via the direct CDN link.
 
-7. **Seeking Support:** The player supports seeking via HTTP Range requests — when the user scrubs the progress bar, the browser sends a `Range` header, and the backend forwards it to YouTube's CDN for partial content delivery (HTTP 206).
-
-8. **URL Caching:** Extracted stream URLs are cached for 4 hours (YouTube URLs expire after ~6 hours), making subsequent plays and seeks instant.
+7. **URL Caching:** Extracted stream URLs and redirect URLs are cached for 4 hours to make subsequent plays and seeks instant, reducing API calls and bandwidth.
 
 ---
 
@@ -248,8 +245,8 @@ The project includes a `render.yaml` Blueprint for one-click deployment to [Rend
 - The **start command** runs the Express backend, which serves the compiled React app as static files.
 - A **persistent disk** (1 GB) is mounted at `backend/.data/` to preserve the SQLite database between deploys.
 
-### Known Limitation
-> ⚠️ **YouTube blocks audio streaming from datacenter IPs.** The search, UI, and all other features work perfectly on Render. However, playing songs may fail with a 500 error because YouTube detects and blocks requests originating from cloud server IP addresses. This does **not** happen when running locally on your home network.
+### 🚀 Intelligent Cloud Streaming (No IP Blocks!)
+> 🧠 **How we bypass cloud IP blocks:** Major platforms like YouTube actively block media extraction from datacenter IPs like Render, often resulting in 403 Forbidden errors or infinite hangs. To solve this, SAREGAMA is equipped with an intelligent fallback engine. If YouTube blocks the request, the backend seamlessly translates your search query, locates the exact track on JioSaavn's hidden API, cracks the DES-ECB encryption on their media URLs, and issues a 302 Redirect. This forces your browser to download the audio directly from JioSaavn's CDN using your own home IP, successfully bypassing all cloud blocks for a 100% free streaming experience!
 
 ---
 
@@ -257,7 +254,6 @@ The project includes a `render.yaml` Blueprint for one-click deployment to [Rend
 
 | Upgrade | Description |
 |---------|-------------|
-| 🎵 **Alternative Audio Source** | Integrate JioSaavn or other music APIs as a fallback for streaming when YouTube blocks datacenter requests |
 | 🔐 **OAuth Login** | Add Google/GitHub OAuth for a seamless sign-in experience |
 | 🔀 **Shuffle & Repeat** | Add shuffle mode, repeat-one, and repeat-all to the player controls |
 | 🎨 **Dynamic Themes** | Extract dominant colors from album art and apply them to the UI in real-time |
