@@ -270,7 +270,8 @@ The project includes a `render.yaml` Blueprint for one-click deployment to [Rend
 
 ## 📄 License
 
-This project is open source.
+**© 2026 Vaibhav R Valakunde. All Rights Reserved.**
+This project is proprietary and confidential. Unauthorized copying, modification, distribution, or use of this repository's contents is strictly prohibited without prior written permission from the author.
 
 ---
 

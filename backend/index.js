@@ -11,7 +11,17 @@ const NodeCache = require('node-cache');
 const { Readable } = require('stream');
 
 const app = express();
-app.use(cors());
+// Restrict API access to your frontend to prevent others from stealing your backend bandwidth
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:3001', 'https://saregama-lmt4.onrender.com'];
+app.use(cors({
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
 app.use(express.json());
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
