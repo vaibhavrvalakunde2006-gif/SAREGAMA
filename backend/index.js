@@ -112,25 +112,28 @@ app.get('/api/browse/:category', async (req, res) => {
 });
 
 const youtubedl = require('youtube-dl-exec');
-const crypto = require('crypto');
+const CryptoJS = require('crypto-js');
 
 // ── JioSaavn Fallback Helper ──────────────────────────────────────────────
 // When YouTube blocks datacenter IPs, we search the same song on JioSaavn
 // and stream the MP4 from their CDN instead.
 
-const SAAVN_KEY = '38346591'; // DES-ECB key for decrypting media URLs
+const SAAVN_KEY = CryptoJS.enc.Utf8.parse('38346591'); // DES-ECB key for decrypting media URLs
 
 function decryptSaavnUrl(encryptedUrl) {
   try {
-    const decipher = crypto.createDecipheriv('des-ecb', Buffer.from(SAAVN_KEY), null);
-    let decrypted = decipher.update(encryptedUrl, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
+    const decrypted = CryptoJS.DES.decrypt({
+      ciphertext: CryptoJS.enc.Base64.parse(encryptedUrl)
+    }, SAAVN_KEY, {
+      mode: CryptoJS.mode.ECB,
+      padding: CryptoJS.pad.Pkcs7
+    });
+    
+    let url = decrypted.toString(CryptoJS.enc.Utf8);
     // Upgrade to 320kbps if available
-    return decrypted.replace('_96.mp4', '_320.mp4');
+    return url.replace('_96.mp4', '_320.mp4');
   } catch (e) {
-    // On Node 24+ with OpenSSL 3, DES-ECB is unsupported by default.
-    // Fall back to using the preview URL approach instead.
-    throw new Error('DES decryption unsupported — upgrade Node or use --openssl-legacy-provider');
+    throw new Error('crypto-js DES decryption failed: ' + e.message);
   }
 }
 
@@ -156,18 +159,9 @@ async function getSaavnStreamUrl(title, artist) {
     throw new Error('No media URL from JioSaavn');
   }
   
-  // Step 3: Try to decrypt for 320kbps, fall back to preview URL (96kbps)
-  try {
-    const streamUrl = decryptSaavnUrl(songDetails.encrypted_media_url);
-    return streamUrl;
-  } catch (e) {
-    // DES decryption failed (e.g. Node 24), use preview URL instead
-    if (songDetails.media_preview_url) {
-      console.log('[Saavn] Using preview URL (96kbps) — DES decrypt unavailable');
-      return songDetails.media_preview_url;
-    }
-    throw e;
-  }
+  // Step 3: Decrypt the media URL
+  const streamUrl = decryptSaavnUrl(songDetails.encrypted_media_url);
+  return streamUrl;
 }
 
 // ── Audio Stream Proxy ────────────────────────────────────────────────────
