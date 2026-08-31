@@ -196,27 +196,32 @@ async function getSaavnStreamUrl(title, artist) {
         
         let isMatch = false;
         
+        // 1. MUST HAVE TITLE OVERLAP NO MATTER WHAT!
+        const cWords = shortTitle.split(/[\s]+/).filter(w => w.length > 2);
+        const sWords = sTitle.split(/[\s]+/).filter(w => w.length > 2);
+        
+        let wordMatches = 0;
+        for (const cw of cWords) {
+          if (sWords.includes(cw)) wordMatches++;
+        }
+        
+        let hasTitleMatch = false;
+        if (sTitle === shortTitle) hasTitleMatch = true;
+        else if (cWords.length === 1 && wordMatches === 1) hasTitleMatch = true;
+        else if (cWords.length > 1 && wordMatches >= 2) hasTitleMatch = true;
+        else if (cWords.length > 0 && wordMatches === cWords.length) hasTitleMatch = true;
+        
+        if (!hasTitleMatch) continue; // If the title doesn't match, SKIP immediately.
+
+        // 2. If artist is provided, verify it (unless title is a perfect identical match)
         if (cArtist) {
-          // If we have a specific artist, it MUST be in the JioSaavn artists list.
-          // Or, the title must be an absolutely perfect identical match.
           if (sArtists.includes(cArtist)) {
             isMatch = true;
           } else if (sTitle === shortTitle) {
             isMatch = true;
           }
         } else {
-          // No artist provided, rely on word overlap
-          const cWords = shortTitle.split(/[\s]+/).filter(w => w.length > 2);
-          const sWords = sTitle.split(/[\s]+/).filter(w => w.length > 2);
-          
-          let wordMatches = 0;
-          for (const cw of cWords) {
-            if (sWords.includes(cw)) wordMatches++;
-          }
-          
-          if (cWords.length === 1 && wordMatches === 1) isMatch = true;
-          if (cWords.length > 1 && wordMatches >= 2) isMatch = true;
-          if (cWords.length > 0 && wordMatches === cWords.length) isMatch = true;
+          isMatch = true;
         }
 
         // Penalize unwanted remixes/covers
