@@ -148,30 +148,73 @@ function decryptSaavnUrl(encryptedUrl) {
 }
 
 async function getSaavnStreamUrl(title, artist) {
-  // Clean up YouTube titles (remove "(Official Video)", "[Lyric Video]", etc.)
-  const cleanTitle = title.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim();
-  const cleanArtist = artist.replace(/ - Topic$/, '').trim();
+  let cTitle = title.toLowerCase()
+    .replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '')
+    .split('|')[0].split('-')[0]
+    .replace(/ft\..*/i, '').replace(/feat\..*/i, '')
+    .replace(/official video/ig, '')
+    .replace(/full video/ig, '')
+    .replace(/lyrical/ig, '')
+    .replace(/video song/ig, '')
+    .replace(/audio/ig, '')
+    .replace(/song/ig, '')
+    .trim();
   
-  const searchQuery = `${cleanTitle} ${cleanArtist}`.trim();
-  const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(searchQuery)}&n=5&p=1&_format=json&_marker=0&ctx=wap6dot0`;
-  
-  const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
-  const searchData = await searchRes.json();
-  
-  const results = searchData.results || [];
-  if (!results.length) throw new Error('Song not found on JioSaavn');
-  
-  // Find the best match (try to match artist if possible, otherwise use the first result)
-  let bestSong = results[0];
-  for (const song of results) {
-    if (song.primary_artists && song.primary_artists.toLowerCase().includes(cleanArtist.toLowerCase())) {
-      bestSong = song;
-      break;
+  let cArtist = artist.toLowerCase().replace(/ - topic$/, '').trim();
+  if (cArtist.includes('t-series') || cArtist.includes('vevo') || cArtist.includes('records') || cArtist.includes('music')) {
+    cArtist = ''; 
+  }
+
+  const queries = [
+    `${cTitle} ${cArtist}`.trim(),
+    cTitle
+  ];
+
+  let bestSong = null;
+  let highestScore = -1;
+
+  for (const q of queries) {
+    if (!q) continue;
+    const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&n=10&p=1&_format=json&_marker=0&ctx=wap6dot0`;
+    
+    try {
+      const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
+      const searchData = await searchRes.json();
+      const results = searchData.results || [];
+
+      for (const song of results) {
+        let score = 0;
+        const sTitle = (song.song || song.title || '').toLowerCase();
+        const sArtists = (song.primary_artists || song.singers || '').toLowerCase();
+
+        if (sTitle === cTitle) score += 10;
+        else if (sTitle.includes(cTitle)) score += 5;
+
+        if (cArtist && sArtists.includes(cArtist)) score += 10;
+        
+        // Heavy penalties for remixes/covers if the original was NOT a remix/cover
+        if (!cTitle.includes('remix') && (sTitle.includes('remix') || sTitle.includes('slowed') || sTitle.includes('mashup') || sTitle.includes('lofi') || sTitle.includes('lo-fi'))) {
+          score -= 10;
+        }
+        if (!cTitle.includes('cover') && sTitle.includes('cover')) {
+          score -= 10;
+        }
+
+        if (score > highestScore) {
+          highestScore = score;
+          bestSong = song;
+        }
+      }
+      
+      // Stop early if we find an exact match (Title + Artist)
+      if (highestScore >= 15) break;
+    } catch (e) {
+      console.log('JioSaavn search failed for query:', q);
     }
   }
-  
-  if (!bestSong.encrypted_media_url) {
-    throw new Error('No media URL from JioSaavn');
+
+  if (!bestSong || !bestSong.encrypted_media_url) {
+    throw new Error('No matching song found on JioSaavn');
   }
   
   const streamUrl = decryptSaavnUrl(bestSong.encrypted_media_url);
