@@ -2,30 +2,47 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const crypto = require('crypto');
+const admin = require('firebase-admin');
+
+// Initialize Firebase Admin with just the projectId (no service account needed for token verification)
+if (!admin.apps.length) {
+  admin.initializeApp({ projectId: 'saregama-2dfd9' });
+}
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'saregama-super-secret-key';
 
-// Mock Login (Creates user if not exists)
-router.post('/login', (req, res) => {
-  const { email, name } = req.body;
-  if (!email) {
-    return res.status(400).json({ error: 'Email is required' });
+// Login with Firebase ID Token
+router.post('/login', async (req, res) => {
+  const { idToken, email: fallbackEmail, name: fallbackName } = req.body;
+  
+  if (!idToken) {
+    return res.status(400).json({ error: 'Firebase idToken is required' });
   }
 
-  // Find or create user
-  const getUserStmt = db.prepare('SELECT * FROM users WHERE email = ?');
-  let user = getUserStmt.get(email);
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const uid = decodedToken.uid;
+    const email = decodedToken.email || decodedToken.phone_number || fallbackEmail || `${uid}@firebase.user`;
+    const name = decodedToken.name || fallbackName || email.split('@')[0];
 
-  if (!user) {
-    const userId = crypto.randomUUID();
-    const insertStmt = db.prepare('INSERT INTO users (id, email, name) VALUES (?, ?, ?)');
-    insertStmt.run(userId, email, name || email.split('@')[0]);
-    user = { id: userId, email, name: name || email.split('@')[0] };
+    // Find or create user in SQLite
+    const getUserStmt = db.prepare('SELECT * FROM users WHERE email = ?');
+    let user = getUserStmt.get(email);
+
+    if (!user) {
+      const userId = crypto.randomUUID();
+      const insertStmt = db.prepare('INSERT INTO users (id, email, name) VALUES (?, ?, ?)');
+      insertStmt.run(userId, email, name);
+      user = { id: userId, email, name };
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    res.json({ token, user });
+  } catch (error) {
+    console.error('Firebase Auth Error:', error);
+    res.status(401).json({ error: 'Invalid Firebase token', details: error.message });
   }
-
-  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user });
 });
 
 // Get current user
