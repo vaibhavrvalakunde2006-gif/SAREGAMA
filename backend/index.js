@@ -231,7 +231,15 @@ app.get('/api/stream/:identifier', async (req, res) => {
           // Look up song title/artist from cache (set during search/browse)
           let meta = cache.get(`songmeta:${identifier}`);
           
-          // If not in cache, try to fetch title from YouTube metadata (with timeout)
+          // If not in cache, use query parameters if provided
+          if (!meta && req.query.title) {
+            meta = {
+              title: req.query.title,
+              artist: req.query.artist || ''
+            };
+          }
+          
+          // If still no meta, try to fetch title from YouTube metadata (with timeout)
           if (!meta) {
             const yt = await initYT();
             const infoPromise = yt.getBasicInfo(identifier);
