@@ -191,7 +191,7 @@ app.get('/api/stream/:identifier', async (req, res) => {
     if (!url) {
       // ── Attempt 1: YouTube via yt-dlp ──
       try {
-        const output = await youtubedl(`https://www.youtube.com/watch?v=${identifier}`, {
+        const fetchPromise = youtubedl(`https://www.youtube.com/watch?v=${identifier}`, {
           dumpSingleJson: true,
           noCheckCertificates: true,
           noWarnings: true,
@@ -202,7 +202,12 @@ app.get('/api/stream/:identifier', async (req, res) => {
             'referer:youtube.com',
             'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           ]
-        }, { timeout: 10000 });
+        });
+
+        // Enforce a strict 5-second timeout, if YouTube tarpits the connection we want to fallback quickly
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('YouTube fetch timed out')), 5000));
+        
+        const output = await Promise.race([fetchPromise, timeoutPromise]);
         
         const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
         audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
