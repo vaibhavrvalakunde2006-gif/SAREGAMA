@@ -2436,6 +2436,13 @@ export default function BablooApp() {
             </div>
             <div className="flex items-center gap-3">
               <button
+                onClick={() => { clearDetails(); setView("search"); }}
+                className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-[#9490A8] hover:text-[#EDEBF7] hover:bg-white/5"
+                title="Search"
+              >
+                <Search className="w-4 h-4" />
+              </button>
+              <button
                 onClick={() => setShowNotifications((v) => !v)}
                 className="relative w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-[#9490A8] hover:text-[#EDEBF7] hover:bg-white/5"
               >
