@@ -145,79 +145,101 @@ function decryptSaavnUrl(encryptedUrl) {
   } catch (e) {
     throw new Error('crypto-js DES decryption failed: ' + e.message);
   }
-}
+const entities = { '&quot;': '"', '&amp;': '&', '&#039;': "'", '&lt;': '<', '&gt;': '>' };
+const decodeHtml = str => str.replace(/&[#a-z0-9]+;/gi, match => entities[match.toLowerCase()] || match);
 
-async function getSaavnStreamUrl(title, artist) {
-  let cTitle = title.toLowerCase()
+function cleanTitleString(t) {
+  return decodeHtml(t).toLowerCase()
     .replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '')
-    .split('|')[0].split('-')[0]
     .replace(/ft\..*/i, '').replace(/feat\..*/i, '')
     .replace(/official video/ig, '')
     .replace(/full video/ig, '')
     .replace(/lyrical/ig, '')
     .replace(/video song/ig, '')
     .replace(/audio/ig, '')
-    .replace(/song/ig, '')
     .trim();
+}
+
+async function getSaavnStreamUrl(title, artist) {
+  let cTitle = cleanTitleString(title);
+  let cArtist = decodeHtml(artist).toLowerCase().replace(/ - topic$/, '').trim();
   
-  let cArtist = artist.toLowerCase().replace(/ - topic$/, '').trim();
   if (cArtist.includes('t-series') || cArtist.includes('vevo') || cArtist.includes('records') || cArtist.includes('music')) {
     cArtist = ''; 
   }
 
+  let shortTitle = cTitle.split('|')[0].split('-')[0].trim();
+
+  // Try multiple variations. The first one to find a strict match wins.
   const queries = [
     `${cTitle} ${cArtist}`.trim(),
-    cTitle
+    `${shortTitle} ${cArtist}`.trim(),
+    shortTitle
   ];
 
-  let bestSong = null;
-  let highestScore = -1;
+  const uniqueQueries = [...new Set(queries)].filter(Boolean);
+  let bestMatch = null;
 
-  for (const q of queries) {
-    if (!q) continue;
-    const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&n=10&p=1&_format=json&_marker=0&ctx=wap6dot0`;
+  for (const q of uniqueQueries) {
+    const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&n=5&p=1&_format=json&_marker=0&ctx=wap6dot0`;
     
     try {
       const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
       const searchData = await searchRes.json();
       const results = searchData.results || [];
-
+      
       for (const song of results) {
-        let score = 0;
-        const sTitle = (song.song || song.title || '').toLowerCase();
-        const sArtists = (song.primary_artists || song.singers || '').toLowerCase();
-
-        if (sTitle === cTitle) score += 10;
-        else if (sTitle.includes(cTitle)) score += 5;
-
-        if (cArtist && sArtists.includes(cArtist)) score += 10;
+        const sTitle = cleanTitleString(song.song || song.title || '');
+        const sArtists = decodeHtml(song.primary_artists || song.singers || '').toLowerCase();
         
-        // Heavy penalties for remixes/covers if the original was NOT a remix/cover
-        if (!cTitle.includes('remix') && (sTitle.includes('remix') || sTitle.includes('slowed') || sTitle.includes('mashup') || sTitle.includes('lofi') || sTitle.includes('lo-fi'))) {
-          score -= 10;
-        }
-        if (!cTitle.includes('cover') && sTitle.includes('cover')) {
-          score -= 10;
+        let isMatch = false;
+        
+        if (cArtist) {
+          // If we have a specific artist, it MUST be in the JioSaavn artists list.
+          // Or, the title must be an absolutely perfect identical match.
+          if (sArtists.includes(cArtist)) {
+            isMatch = true;
+          } else if (sTitle === shortTitle) {
+            isMatch = true;
+          }
+        } else {
+          // No artist provided, rely on word overlap
+          const cWords = shortTitle.split(/[\s]+/).filter(w => w.length > 2);
+          const sWords = sTitle.split(/[\s]+/).filter(w => w.length > 2);
+          
+          let wordMatches = 0;
+          for (const cw of cWords) {
+            if (sWords.includes(cw)) wordMatches++;
+          }
+          
+          if (cWords.length === 1 && wordMatches === 1) isMatch = true;
+          if (cWords.length > 1 && wordMatches >= 2) isMatch = true;
+          if (cWords.length > 0 && wordMatches === cWords.length) isMatch = true;
         }
 
-        if (score > highestScore) {
-          highestScore = score;
-          bestSong = song;
+        // Penalize unwanted remixes/covers
+        if (!cTitle.includes('remix') && sTitle.includes('remix')) isMatch = false;
+        if (!cTitle.includes('cover') && sTitle.includes('cover')) isMatch = false;
+        if (!cTitle.includes('mashup') && sTitle.includes('mashup')) isMatch = false;
+
+        if (isMatch) {
+          bestMatch = song;
+          break; // Found the best match
         }
       }
       
-      // Stop early if we find an exact match (Title + Artist)
-      if (highestScore >= 15) break;
+      if (bestMatch) break;
+      
     } catch (e) {
       console.log('JioSaavn search failed for query:', q);
     }
   }
 
-  if (!bestSong || !bestSong.encrypted_media_url) {
-    throw new Error('No matching song found on JioSaavn');
+  if (!bestMatch || !bestMatch.encrypted_media_url) {
+    throw new Error('No accurate matching song found on JioSaavn');
   }
   
-  const streamUrl = decryptSaavnUrl(bestSong.encrypted_media_url);
+  const streamUrl = decryptSaavnUrl(bestMatch.encrypted_media_url);
   return streamUrl;
 }
 
