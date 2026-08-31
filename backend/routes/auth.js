@@ -2,11 +2,12 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 const crypto = require('crypto');
-const admin = require('firebase-admin');
+const { initializeApp, getApps } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
 
-// Initialize Firebase Admin with just the projectId (no service account needed for token verification)
-if (!admin.apps.length) {
-  admin.initializeApp({ projectId: 'saregama-2dfd9' });
+// Initialize Firebase Admin with just the projectId
+if (!getApps().length) {
+  initializeApp({ projectId: 'saregama-2dfd9' });
 }
 
 const router = express.Router();
@@ -21,7 +22,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const decodedToken = await getAuth().verifyIdToken(idToken);
     const uid = decodedToken.uid;
     const email = decodedToken.email || decodedToken.phone_number || fallbackEmail || `${uid}@firebase.user`;
     const name = decodedToken.name || fallbackName || email.split('@')[0];
