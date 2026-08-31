@@ -10,6 +10,7 @@
 
 | Feature | Description |
 |---|---|
+| 🔐 **Smart Authentication** | Google, Phone (OTP), and Email/Password login powered by Firebase, with permanent 10-year sessions |
 | 🔍 **Real-Time Search** | Instantly search millions of songs from YouTube Music's catalog |
 | 🎧 **High-Quality Streaming** | Stream audio in the best available quality with a custom audio player |
 | 📱 **Mobile Responsive** | Fully optimized for phones with a bottom navigation bar, swipe gestures, and a full-screen expanding player |
@@ -106,8 +107,7 @@ Here's what happens when you search for a song and play it:
 | `GET` | `/api/browse/{category}` | Browse songs by genre/category (e.g., "bollywood", "pop") |
 | `GET` | `/api/stream/{videoId}` | Stream audio for a specific song (proxied from YouTube) |
 | `GET` | `/api/lyrics/{videoId}` | Fetch lyrics for a song (when available) |
-| `POST` | `/api/auth/register` | Register a new user account |
-| `POST` | `/api/auth/login` | Login and receive a JWT token |
+| `POST` | `/api/auth/login` | Securely verify Firebase ID Token and receive a persistent JWT session |
 | `GET` | `/api/me/liked` | Get the authenticated user's liked songs |
 | `POST` | `/api/me/liked` | Like/unlike a song |
 | `GET` | `/api/me/history` | Get the user's listening history |
@@ -145,6 +145,7 @@ SAREGAMA uses **SQLite** (via `better-sqlite3`) with WAL mode for fast concurren
 | **Vite 8** | Lightning-fast dev server and optimized production builds |
 | **Tailwind CSS 4** | Utility-first styling with responsive design |
 | **Lucide React** | Beautiful, consistent icon library |
+| **Firebase** | Secure authentication (Google, Phone OTP, Email) |
 | **Zustand** | Lightweight global state management |
 | **React Router 7** | Client-side routing |
 
@@ -155,6 +156,7 @@ SAREGAMA uses **SQLite** (via `better-sqlite3`) with WAL mode for fast concurren
 | **Express 5** | Web framework for REST API |
 | **youtubei.js** | YouTube Music internal API client (search, metadata, lyrics) |
 | **youtube-dl-exec** | yt-dlp wrapper for extracting audio stream URLs |
+| **firebase-admin** | Server-side Firebase ID token verification |
 | **better-sqlite3** | Embedded SQLite database |
 | **node-cache** | In-memory caching layer (TTL-based) |
 | **jsonwebtoken** | JWT-based authentication |
@@ -254,7 +256,6 @@ The project includes a `render.yaml` Blueprint for one-click deployment to [Rend
 
 | Upgrade | Description |
 |---------|-------------|
-| 🔐 **OAuth Login** | Add Google/GitHub OAuth for a seamless sign-in experience |
 | 🔀 **Shuffle & Repeat** | Add shuffle mode, repeat-one, and repeat-all to the player controls |
 | 🎨 **Dynamic Themes** | Extract dominant colors from album art and apply them to the UI in real-time |
 | 📲 **PWA Support** | Convert to a Progressive Web App for installable, offline-capable experience |
