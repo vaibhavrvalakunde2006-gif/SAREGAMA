@@ -285,6 +285,10 @@ app.get('/api/stream/:identifier', async (req, res) => {
 
     const response = await fetch(url, { headers: fetchHeaders });
     
+    if (!response.ok) {
+      throw new Error(`Upstream fetch failed: ${response.status} ${response.statusText}`);
+    }
+    
     if (rangeHeader && response.status === 206) {
       res.status(206);
       const contentRange = response.headers.get('content-range');
