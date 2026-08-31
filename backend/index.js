@@ -145,6 +145,8 @@ function decryptSaavnUrl(encryptedUrl) {
   } catch (e) {
     throw new Error('crypto-js DES decryption failed: ' + e.message);
   }
+}
+
 const entities = { '&quot;': '"', '&amp;': '&', '&#039;': "'", '&lt;': '<', '&gt;': '>' };
 const decodeHtml = str => str.replace(/&[#a-z0-9]+;/gi, match => entities[match.toLowerCase()] || match);
 
