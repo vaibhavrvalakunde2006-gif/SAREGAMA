@@ -139,7 +139,7 @@ async function getSaavnStreamUrl(title, artist) {
   const searchQuery = `${title} ${artist}`.trim();
   const searchUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&query=${encodeURIComponent(searchQuery)}&_format=json&_marker=0&ctx=wap6dot0`;
   
-  const searchRes = await fetch(searchUrl);
+  const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
   const searchData = await searchRes.json();
   
   const firstSong = searchData?.songs?.data?.[0];
@@ -148,7 +148,7 @@ async function getSaavnStreamUrl(title, artist) {
   // Step 2: Get full song details (contains encrypted media URL)
   const detailsUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0%3F_marker%3D0&_format=json&pids=${firstSong.id}`;
   
-  const detailsRes = await fetch(detailsUrl);
+  const detailsRes = await fetch(detailsUrl, { signal: AbortSignal.timeout(5000) });
   const detailsData = await detailsRes.json();
   
   const songDetails = detailsData.songs?.[0] || Object.values(detailsData)[0];
@@ -227,28 +227,33 @@ app.get('/api/stream/:identifier', async (req, res) => {
       if (!url) {
         console.log(`[Stream] Trying JioSaavn fallback for ${identifier}...`);
         
-        // Look up song title/artist from cache (set during search/browse)
-        let meta = cache.get(`songmeta:${identifier}`);
-        
-        // If not in cache, try to fetch title from YouTube metadata
-        if (!meta) {
-          try {
+        try {
+          // Look up song title/artist from cache (set during search/browse)
+          let meta = cache.get(`songmeta:${identifier}`);
+          
+          // If not in cache, try to fetch title from YouTube metadata (with timeout)
+          if (!meta) {
             const yt = await initYT();
-            const info = await yt.getBasicInfo(identifier);
+            const infoPromise = yt.getBasicInfo(identifier);
+            const infoTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('YT info timed out')), 4000));
+            const info = await Promise.race([infoPromise, infoTimeout]);
             meta = {
               title: info.basic_info?.title || '',
               artist: info.basic_info?.author || ''
             };
-          } catch (e) {
-            meta = { title: identifier, artist: '' };
           }
+          
+          const saavnPromise = getSaavnStreamUrl(meta.title, meta.artist);
+          const saavnTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Saavn timed out')), 5000));
+          const saavnUrl = await Promise.race([saavnPromise, saavnTimeout]);
+          
+          url = saavnUrl;
+          contentType = 'audio/mp4';
+          cache.set(cacheKey, { url, contentType }, 14400);
+          console.log(`[Stream] JioSaavn success for "${meta.title}" → ${url}`);
+        } catch (fbError) {
+          console.log(`[Stream] Fallback failed: ${fbError.message}`);
         }
-        
-        const saavnUrl = await getSaavnStreamUrl(meta.title, meta.artist);
-        url = saavnUrl;
-        contentType = 'audio/mp4';
-        cache.set(cacheKey, { url, contentType }, 14400);
-        console.log(`[Stream] JioSaavn success for "${meta.title}" → ${url}`);
       }
     }
 
