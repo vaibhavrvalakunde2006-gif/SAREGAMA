@@ -38,7 +38,7 @@ router.post('/login', async (req, res) => {
       user = { id: userId, email, name };
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '10y' });
     res.json({ token, user });
   } catch (error) {
     console.error('Firebase Auth Error:', error);
