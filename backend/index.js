@@ -74,6 +74,8 @@ app.get('/api/search', async (req, res) => {
       .map(formatYtSong);
 
     cache.set(cacheKey, songs);
+    // Cache individual song metadata for JioSaavn fallback in stream endpoint
+    songs.forEach(s => cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400));
     res.json(songs);
   } catch (error) {
     console.error('Search Error:', error.message);
@@ -101,6 +103,7 @@ app.get('/api/browse/:category', async (req, res) => {
       .map(formatYtSong);
 
     cache.set(cacheKey, songs);
+    songs.forEach(s => cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400));
     res.json(songs);
   } catch (error) {
     console.error('Browse Error:', error.message);
@@ -109,13 +112,73 @@ app.get('/api/browse/:category', async (req, res) => {
 });
 
 const youtubedl = require('youtube-dl-exec');
+const crypto = require('crypto');
 
-// 3. Audio Stream Proxy (pipe through our server to avoid CORS issues)
+// ── JioSaavn Fallback Helper ──────────────────────────────────────────────
+// When YouTube blocks datacenter IPs, we search the same song on JioSaavn
+// and stream the MP4 from their CDN instead.
+
+const SAAVN_KEY = '38346591'; // DES-ECB key for decrypting media URLs
+
+function decryptSaavnUrl(encryptedUrl) {
+  try {
+    const decipher = crypto.createDecipheriv('des-ecb', Buffer.from(SAAVN_KEY), null);
+    let decrypted = decipher.update(encryptedUrl, 'base64', 'utf8');
+    decrypted += decipher.final('utf8');
+    // Upgrade to 320kbps if available
+    return decrypted.replace('_96.mp4', '_320.mp4');
+  } catch (e) {
+    // On Node 24+ with OpenSSL 3, DES-ECB is unsupported by default.
+    // Fall back to using the preview URL approach instead.
+    throw new Error('DES decryption unsupported — upgrade Node or use --openssl-legacy-provider');
+  }
+}
+
+async function getSaavnStreamUrl(title, artist) {
+  // Step 1: Search JioSaavn for the song
+  const searchQuery = `${title} ${artist}`.trim();
+  const searchUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&query=${encodeURIComponent(searchQuery)}&_format=json&_marker=0&ctx=wap6dot0`;
+  
+  const searchRes = await fetch(searchUrl);
+  const searchData = await searchRes.json();
+  
+  const firstSong = searchData?.songs?.data?.[0];
+  if (!firstSong) throw new Error('Song not found on JioSaavn');
+  
+  // Step 2: Get full song details (contains encrypted media URL)
+  const detailsUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0%3F_marker%3D0&_format=json&pids=${firstSong.id}`;
+  
+  const detailsRes = await fetch(detailsUrl);
+  const detailsData = await detailsRes.json();
+  
+  const songDetails = detailsData.songs?.[0] || Object.values(detailsData)[0];
+  if (!songDetails?.encrypted_media_url && !songDetails?.media_preview_url) {
+    throw new Error('No media URL from JioSaavn');
+  }
+  
+  // Step 3: Try to decrypt for 320kbps, fall back to preview URL (96kbps)
+  try {
+    const streamUrl = decryptSaavnUrl(songDetails.encrypted_media_url);
+    return streamUrl;
+  } catch (e) {
+    // DES decryption failed (e.g. Node 24), use preview URL instead
+    if (songDetails.media_preview_url) {
+      console.log('[Saavn] Using preview URL (96kbps) — DES decrypt unavailable');
+      return songDetails.media_preview_url;
+    }
+    throw e;
+  }
+}
+
+// ── Audio Stream Proxy ────────────────────────────────────────────────────
+// Tries YouTube (yt-dlp) first. If that fails, falls back to JioSaavn.
+// This ensures local runs use YouTube and cloud deploys use JioSaavn.
+
 app.get('/api/stream/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
     
-    // Check cache for a working URL (to make seeking and re-fetching instant)
+    // Check cache for a working URL
     const cacheKey = `stream-url:${identifier}`;
     let cached = cache.get(cacheKey);
     let url, contentType;
@@ -126,34 +189,66 @@ app.get('/api/stream/:identifier', async (req, res) => {
     }
 
     if (!url) {
-      // Use yt-dlp to get a working stream URL (bypasses 403 errors)
-      // Added timeout of 10s to prevent hanging, and force-ipv4
-      const output = await youtubedl(`https://www.youtube.com/watch?v=${identifier}`, {
-        dumpSingleJson: true,
-        noCheckCertificates: true,
-        noWarnings: true,
-        preferFreeFormats: true,
-        forceIpv4: true,
-        geoBypass: true,
-        addHeader: [
-          'referer:youtube.com',
-          'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ]
-      }, { timeout: 10000 });
-      
-      const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
-      audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
-      const bestAudio = audioFormats[0];
-      
-      if (!bestAudio) {
-        return res.status(404).json({ error: 'No stream available' });
+      // ── Attempt 1: YouTube via yt-dlp ──
+      try {
+        const output = await youtubedl(`https://www.youtube.com/watch?v=${identifier}`, {
+          dumpSingleJson: true,
+          noCheckCertificates: true,
+          noWarnings: true,
+          preferFreeFormats: true,
+          forceIpv4: true,
+          geoBypass: true,
+          addHeader: [
+            'referer:youtube.com',
+            'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          ]
+        }, { timeout: 10000 });
+        
+        const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
+        audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
+        const bestAudio = audioFormats[0];
+        
+        if (bestAudio) {
+          url = bestAudio.url;
+          contentType = bestAudio.ext === 'webm' ? 'audio/webm' : 'audio/mp4';
+          cache.set(cacheKey, { url, contentType }, 14400);
+          console.log(`[Stream] YouTube success for ${identifier}`);
+        }
+      } catch (ytError) {
+        console.log(`[Stream] YouTube failed for ${identifier}: ${ytError.message}`);
       }
 
-      url = bestAudio.url;
-      contentType = bestAudio.ext === 'webm' ? 'audio/webm' : 'audio/mp4';
-      
-      // Cache URL and content type together for 4 hours (YouTube URLs usually expire after 6 hours)
-      cache.set(cacheKey, { url, contentType }, 14400);
+      // ── Attempt 2: JioSaavn fallback ──
+      if (!url) {
+        console.log(`[Stream] Trying JioSaavn fallback for ${identifier}...`);
+        
+        // Look up song title/artist from cache (set during search/browse)
+        let meta = cache.get(`songmeta:${identifier}`);
+        
+        // If not in cache, try to fetch title from YouTube metadata
+        if (!meta) {
+          try {
+            const yt = await initYT();
+            const info = await yt.getBasicInfo(identifier);
+            meta = {
+              title: info.basic_info?.title || '',
+              artist: info.basic_info?.author || ''
+            };
+          } catch (e) {
+            meta = { title: identifier, artist: '' };
+          }
+        }
+        
+        const saavnUrl = await getSaavnStreamUrl(meta.title, meta.artist);
+        url = saavnUrl;
+        contentType = 'audio/mp4';
+        cache.set(cacheKey, { url, contentType }, 14400);
+        console.log(`[Stream] JioSaavn success for "${meta.title}" → ${url}`);
+      }
+    }
+
+    if (!url) {
+      return res.status(404).json({ error: 'No stream available from any source' });
     }
     
     // Set proper headers for audio streaming
@@ -195,7 +290,7 @@ app.get('/api/stream/:identifier', async (req, res) => {
   } catch (error) {
     console.error(`Audio Stream Error for ${req.params.identifier}:`, error.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: 'Stream failed', message: error.message, stack: String(error.stack) });
+      res.status(500).json({ error: 'Stream failed', message: error.message });
     }
   }
 });
