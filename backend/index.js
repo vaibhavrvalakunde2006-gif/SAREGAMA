@@ -150,8 +150,13 @@ function decryptSaavnUrl(encryptedUrl) {
 const entities = { '&quot;': '"', '&amp;': '&', '&#039;': "'", '&lt;': '<', '&gt;': '>' };
 const decodeHtml = str => str.replace(/&[#a-z0-9]+;/gi, match => entities[match.toLowerCase()] || match);
 
+// Normalize accented characters (é→e, ñ→n, etc.) for cross-language matching
+function normalizeStr(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function cleanTitleString(t) {
-  return decodeHtml(t).toLowerCase()
+  return normalizeStr(decodeHtml(t).toLowerCase())
     .replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '')
     .replace(/ft\..*/i, '').replace(/feat\..*/i, '')
     .replace(/official video/ig, '')
@@ -162,9 +167,12 @@ function cleanTitleString(t) {
     .trim();
 }
 
+// Words that indicate a non-vocal version of a song
+const JUNK_PATTERNS = /instrumental|karaoke|ringtone|8d audio|8d song|reverb|slowed|lofi|lo-fi|unplugged cover|piano version/i;
+
 async function getSaavnStreamUrl(title, artist) {
   let cTitle = cleanTitleString(title);
-  let cArtist = decodeHtml(artist).toLowerCase().replace(/ - topic$/, '').trim();
+  let cArtist = normalizeStr(decodeHtml(artist).toLowerCase().replace(/ - topic$/, '').trim());
   
   if (cArtist.includes('t-series') || cArtist.includes('vevo') || cArtist.includes('records') || cArtist.includes('music')) {
     cArtist = ''; 
@@ -183,7 +191,7 @@ async function getSaavnStreamUrl(title, artist) {
   let bestMatch = null;
 
   for (const q of uniqueQueries) {
-    const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&n=5&p=1&_format=json&_marker=0&ctx=wap6dot0`;
+    const searchUrl = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&n=10&p=1&_format=json&_marker=0&ctx=wap6dot0`;
     
     try {
       const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
@@ -191,8 +199,12 @@ async function getSaavnStreamUrl(title, artist) {
       const results = searchData.results || [];
       
       for (const song of results) {
-        const sTitle = cleanTitleString(song.song || song.title || '');
-        const sArtists = decodeHtml(song.primary_artists || song.singers || '').toLowerCase();
+        const rawSongTitle = decodeHtml(song.song || song.title || '');
+        const sTitle = cleanTitleString(rawSongTitle);
+        const sArtists = normalizeStr(decodeHtml(song.primary_artists || song.singers || '').toLowerCase());
+        
+        // SKIP instrumentals, karaoke, ringtones immediately
+        if (JUNK_PATTERNS.test(rawSongTitle)) continue;
         
         let isMatch = false;
         
