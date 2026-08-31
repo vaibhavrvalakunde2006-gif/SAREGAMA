@@ -178,7 +178,13 @@ app.get('/api/stream/:identifier', async (req, res) => {
   try {
     const { identifier } = req.params;
     
-    // Check cache for a working URL
+    // 1. Check if we already have a JioSaavn redirect URL cached
+    const saavnCacheKey = `saavn-url:${identifier}`;
+    if (cache.has(saavnCacheKey)) {
+      return res.redirect(cache.get(saavnCacheKey));
+    }
+    
+    // 2. Check cache for a working YouTube URL (to make seeking and re-fetching instant)
     const cacheKey = `stream-url:${identifier}`;
     let cached = cache.get(cacheKey);
     let url, contentType;
@@ -255,10 +261,12 @@ app.get('/api/stream/:identifier', async (req, res) => {
           const saavnTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Saavn timed out')), 5000));
           const saavnUrl = await Promise.race([saavnPromise, saavnTimeout]);
           
-          url = saavnUrl;
-          contentType = 'audio/mp4';
-          cache.set(cacheKey, { url, contentType }, 14400);
-          console.log(`[Stream] JioSaavn success for "${meta.title}" → ${url}`);
+          cache.set(saavnCacheKey, saavnUrl, 14400); // Cache for 4 hours
+          console.log(`[Stream] JioSaavn success for "${meta.title}" → Redirecting client directly to CDN`);
+          // Redirect the client to the CDN instead of proxying through the server.
+          // This prevents JioSaavn from blocking the Render datacenter IP (451 Forbidden)
+          // because the client's home IP will be fetching the audio directly.
+          return res.redirect(saavnUrl);
         } catch (fbError) {
           console.log(`[Stream] Fallback failed: ${fbError.message}`);
         }
