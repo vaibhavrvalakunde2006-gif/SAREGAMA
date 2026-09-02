@@ -190,6 +190,9 @@ async function preMatchSongToSaavn(ytTitle, ytArtist, ytDuration = 0) {
     ? [shortTitle]
     : [`${shortTitle} ${cleanArtist}`.trim(), shortTitle];
 
+  let bestMatch = null;
+  let highestScore = -999;
+
   for (const q of [...new Set(queries)].filter(Boolean)) {
     const url = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(q)}&n=10&p=1&_format=json&_marker=0&ctx=wap6dot0`;
     try {
@@ -198,18 +201,39 @@ async function preMatchSongToSaavn(ytTitle, ytArtist, ytDuration = 0) {
         if (JUNK_PATTERNS.test(decodeHtml(song.song || ''))) continue;
         if (!song.encrypted_media_url) continue;
         
-        // Strict duration validation: must be within 15 seconds if both exist
+        let score = 0;
+        const saavnTitle = normalizeStr(decodeHtml(song.song || '')).toLowerCase();
+        
+        // 1. Title match
+        if (saavnTitle === cleanTitle || saavnTitle === shortTitle) score += 20;
+        else if (saavnTitle.includes(shortTitle) || shortTitle.includes(saavnTitle)) score += 10;
+        else score -= 10;
+        
+        // 2. Artist match
+        if (cleanArtist && song.singers) {
+           const saavnArtist = normalizeStr(decodeHtml(song.singers)).toLowerCase();
+           if (saavnArtist.includes(cleanArtist) || cleanArtist.includes(saavnArtist)) score += 10;
+        }
+
+        // 3. Duration match
         if (ytDuration > 0 && song.duration) {
           const saavnDuration = parseInt(song.duration, 10);
-          if (saavnDuration > 0 && Math.abs(saavnDuration - ytDuration) > 15) {
-            continue; // Skip mismatched covers/mixes
-          }
+          const diff = Math.abs(saavnDuration - ytDuration);
+          if (diff <= 5) score += 25;
+          else if (diff <= 15) score += 15;
+          else if (diff <= 30) score += 5;
+          else score -= 15; 
         }
-        return song.id;
+
+        if (score > highestScore) {
+           highestScore = score;
+           bestMatch = song;
+        }
       }
     } catch {}
+    if (bestMatch && highestScore >= 15) break; 
   }
-  return null;
+  return bestMatch && highestScore >= 0 ? bestMatch.id : null;
 }
 
 // Pre-match all songs from a search result in parallel (background, non-blocking)
