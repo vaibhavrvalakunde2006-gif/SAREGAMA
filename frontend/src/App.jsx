@@ -2131,7 +2131,7 @@ export default function BablooApp() {
   // Sync audio src when song changes
   useEffect(() => {
     if (!audioRef.current || !song) return;
-    const streamUrl = song.audioStream || `/api/stream/${song.id}?title=${encodeURIComponent(song.title || '')}&artist=${encodeURIComponent(song.artist || '')}`;
+    const streamUrl = song.audioStream || `/api/stream/${song.id}?title=${encodeURIComponent(song.title || '')}&artist=${encodeURIComponent(song.artist || '')}&duration=${song.duration?.seconds || song.duration || 0}`;
     // Only update src if it actually changed to avoid reloading the same track
     if (audioRef.current.src !== streamUrl && !audioRef.current.src.endsWith(streamUrl)) {
       audioRef.current.src = streamUrl;

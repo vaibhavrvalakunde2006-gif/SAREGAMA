@@ -98,7 +98,7 @@ app.get('/api/search', async (req, res) => {
       if (saavnId) {
         s.audioStream = `/api/stream/${s.id}?saavnId=${saavnId}`;
       }
-      cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400);
+      cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist, duration: s.duration }, 86400);
     });
 
     cache.set(cacheKey, songs);
@@ -140,7 +140,7 @@ app.get('/api/browse/:category', async (req, res) => {
       if (saavnId) {
         s.audioStream = `/api/stream/${s.id}?saavnId=${saavnId}`;
       }
-      cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400);
+      cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist, duration: s.duration }, 86400);
     });
 
     cache.set(cacheKey, songs);
@@ -299,7 +299,6 @@ app.get('/api/stream/:identifier', async (req, res) => {
           noCheckCertificates: true,
           noWarnings: true,
           preferFreeFormats: true,
-          forceIpv4: true,
           geoBypass: true,
           addHeader: [
             'referer:youtube.com',
@@ -312,9 +311,9 @@ app.get('/api/stream/:identifier', async (req, res) => {
         
         const output = await Promise.race([fetchPromise, timeoutPromise]);
         
-        const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
+        const audioFormats = output.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none' && f.ext !== 'webm');
         audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
-        const bestAudio = audioFormats[0];
+        const bestAudio = audioFormats[0] || output.formats.find(f => f.acodec !== 'none' && f.vcodec === 'none');
         
         if (bestAudio) {
           url = bestAudio.url;
@@ -343,7 +342,7 @@ app.get('/api/stream/:identifier', async (req, res) => {
             let meta = cache.get(`songmeta:${identifier}`);
             
             if (!meta && req.query.title) {
-              meta = { title: req.query.title, artist: req.query.artist || '' };
+              meta = { title: req.query.title, artist: req.query.artist || '', duration: parseInt(req.query.duration || 0, 10) };
             }
             
             if (!meta) {
@@ -351,10 +350,13 @@ app.get('/api/stream/:identifier', async (req, res) => {
               const infoPromise = yt.getBasicInfo(identifier);
               const infoTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('YT info timed out')), 4000));
               const info = await Promise.race([infoPromise, infoTimeout]);
-              meta = { title: info.basic_info?.title || '', artist: info.basic_info?.author || '' };
+              meta = { title: info.basic_info?.title || '', artist: info.basic_info?.author || '', duration: info.basic_info?.duration || 0 };
             }
-            
-            saavnUrl = await getSaavnStreamUrl(meta.title, meta.artist);
+
+            console.log(`[Stream] yt-dlp failed, attempting on-the-fly Saavn match for: ${meta.title}`);
+            const foundId = await preMatchSongToSaavn(meta.title, meta.artist, meta.duration);
+            if (!foundId) throw new Error('No matching song found on JioSaavn');
+            saavnUrl = await getStreamBySaavnId(foundId);
           }
           
           cache.set(saavnCacheKey, saavnUrl, 14400);
