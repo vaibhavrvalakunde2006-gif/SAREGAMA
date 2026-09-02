@@ -70,38 +70,32 @@ app.get('/api/search', async (req, res) => {
     const query = req.query.q;
     if (!query || !query.trim()) return res.json([]);
 
-    const cacheKey = `search:${query}`;
+    const cacheKey = `search:saavn:${query}`;
     if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
 
-    const yt = await initYT();
-    const search = await yt.music.search(query, { type: 'song' });
+    const url = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(query)}&n=20&p=1&_format=json&_marker=0&ctx=wap6dot0`;
+    const data = await fetch(url).then(r => r.json());
     
-    const list = search.contents?.[0]?.contents || search.results || [];
+    const list = data.results || [];
     if (!list.length) return res.json([]);
 
-    const songs = list
-      .filter(item => item.type === 'MusicResponsiveListItem' && (item.id || item.video_id))
-      .map(formatYtSong);
+    const songs = list.map(song => ({
+      id: song.id,
+      title: decodeHtml(song.song || song.title || 'Unknown Title'),
+      artist: decodeHtml(song.primary_artists || song.singers || 'Unknown Artist'),
+      duration: parseInt(song.duration, 10) || 0,
+      colors: ['#8B5CF6', '#2DD9C8'],
+      coverArt: song.image ? song.image.replace(/150x150|50x50/g, '500x500') : null,
+      audioStream: `/api/stream/${song.id}?saavnId=${song.id}`
+    }));
 
-    // Pre-match ALL songs to JioSaavn BEFORE responding (wait max 3s total)
-    // This guarantees the JioSaavn ID is available when the user clicks play
-    try {
-      await Promise.race([
-        preMatchAllToSaavn(songs),
-        new Promise(resolve => setTimeout(resolve, 3000))
-      ]);
-    } catch {}
-    
-    // Embed JioSaavn IDs into audioStream URLs
+    // Cache the metadata for fallback
     songs.forEach(s => {
-      const saavnId = cache.get(`saavn-id:${s.id}`);
-      if (saavnId) {
-        s.audioStream = `/api/stream/${s.id}?saavnId=${saavnId}`;
-      }
       cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400);
+      cache.set(`saavn-id:${s.id}`, s.id, 86400);
     });
 
-    cache.set(cacheKey, songs);
+    cache.set(cacheKey, songs, 600);
     res.json(songs);
   } catch (error) {
     console.error('Search Error:', error.message);
@@ -115,35 +109,31 @@ app.get('/api/browse/:category', async (req, res) => {
     const category = req.params.category;
     const query = `${category} top hits songs`;
 
-    const cacheKey = `browse:${category}`;
+    const cacheKey = `browse:saavn:${category}`;
     if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
 
-    const yt = await initYT();
-    const search = await yt.music.search(query, { type: 'song' });
+    const url = `https://www.jiosaavn.com/api.php?__call=search.getResults&q=${encodeURIComponent(query)}&n=20&p=1&_format=json&_marker=0&ctx=wap6dot0`;
+    const data = await fetch(url).then(r => r.json());
     
-    const list = search.contents?.[0]?.contents || search.results || [];
+    const list = data.results || [];
     if (!list.length) return res.json([]);
 
-    const songs = list
-      .filter(item => item.type === 'MusicResponsiveListItem' && (item.id || item.video_id))
-      .map(formatYtSong);
+    const songs = list.map(song => ({
+      id: song.id,
+      title: decodeHtml(song.song || song.title || 'Unknown Title'),
+      artist: decodeHtml(song.primary_artists || song.singers || 'Unknown Artist'),
+      duration: parseInt(song.duration, 10) || 0,
+      colors: ['#8B5CF6', '#2DD9C8'],
+      coverArt: song.image ? song.image.replace(/150x150|50x50/g, '500x500') : null,
+      audioStream: `/api/stream/${song.id}?saavnId=${song.id}`
+    }));
 
-    try {
-      await Promise.race([
-        preMatchAllToSaavn(songs),
-        new Promise(resolve => setTimeout(resolve, 3000))
-      ]);
-    } catch {}
-    
     songs.forEach(s => {
-      const saavnId = cache.get(`saavn-id:${s.id}`);
-      if (saavnId) {
-        s.audioStream = `/api/stream/${s.id}?saavnId=${saavnId}`;
-      }
       cache.set(`songmeta:${s.id}`, { title: s.title, artist: s.artist }, 86400);
+      cache.set(`saavn-id:${s.id}`, s.id, 86400);
     });
 
-    cache.set(cacheKey, songs);
+    cache.set(cacheKey, songs, 600);
     res.json(songs);
   } catch (error) {
     console.error('Browse Error:', error.message);
@@ -248,7 +238,20 @@ app.get('/api/stream/:identifier', async (req, res) => {
       return res.redirect(cache.get(saavnCacheKey));
     }
     
-    // 2. Check cache for a working YouTube URL (to make seeking and re-fetching instant)
+    // 2. If saavnId is provided or cached, go straight to JioSaavn!
+    const saavnId = req.query.saavnId || cache.get(`saavn-id:${identifier}`);
+    if (saavnId) {
+      try {
+        const saavnUrl = await getStreamBySaavnId(saavnId);
+        cache.set(saavnCacheKey, saavnUrl, 14400);
+        console.log(`[Stream] JioSaavn success for ID: ${saavnId} → Redirecting`);
+        return res.redirect(saavnUrl);
+      } catch (err) {
+        console.log(`[Stream] JioSaavn direct fetch failed: ${err.message}`);
+      }
+    }
+    
+    // 3. Check cache for a working YouTube URL (to make seeking and re-fetching instant)
     const cacheKey = `stream-url:${identifier}`;
     let cached = cache.get(cacheKey);
     let url, contentType;
@@ -392,9 +395,10 @@ app.get('/api/lyrics/:id', async (req, res) => {
     const cacheKey = `lyrics:${id}`;
     if (cache.has(cacheKey)) return res.json(cache.get(cacheKey));
 
-    const yt = await initYT();
-    const lyrics = await yt.music.getLyrics(id);
-    const lyricsText = lyrics?.description?.text || null;
+    const url = `https://www.jiosaavn.com/api.php?__call=lyrics.getLyrics&lyrics_id=${id}&ctx=wap6dot0&api_version=4&_format=json&_marker=0`;
+    const data = await fetch(url).then(r => r.json());
+    
+    const lyricsText = data.lyrics ? data.lyrics.replace(/<br>/g, '\n') : null;
     
     cache.set(cacheKey, { text: lyricsText }, 86400); // cache for a day
     res.json({ text: lyricsText });
